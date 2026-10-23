@@ -37,6 +37,7 @@ export default function Topbar({
           icon="pi pi-bars"
           text
           severity="secondary"
+          className="topbar-menu-toggle"
           onClick={onMenuToggle}
           aria-label={isMobile ? 'Open menu' : 'Toggle sidebar'}
         />

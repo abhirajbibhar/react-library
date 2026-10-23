@@ -66,6 +66,8 @@ export default function AppLayout() {
           position="left"
           className="app-sidebar-mobile"
           maskClassName="app-sidebar-mask-mobile"
+          showCloseIcon={false}
+          blockScroll={false}
           visible={mobileNavOpen}
           onHide={() => setMobileNavOpen(false)}
         >

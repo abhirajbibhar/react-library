@@ -73,10 +73,14 @@ body {
   display: none;
 }
 
+/* Icon-only rail: center the brand icon and divider it from the menu icons below. */
 .app-sidebar.collapsed .sidebar-brand {
   justify-content: center;
   padding-left: 0.5rem;
   padding-right: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .app-sidebar.collapsed .menu-item {
@@ -87,6 +91,13 @@ body {
 
 .app-sidebar.collapsed .menu-section {
   padding: 0.25rem 0.35rem;
+}
+
+/* Icon-only rail: separate the sections with a divider between the icons. */
+.app-sidebar.collapsed .menu-section + .menu-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
 }
 
 .app-sidebar.collapsed .menu-item-icon {
@@ -108,8 +119,37 @@ body {
   height: calc(100% - var(--topbar-height)) !important;
 }
 
+/* Render it as a true drawer, not a modal dialog: flush to the topbar, no
+   rounded corners, no drop shadow, and PrimeReact's default white surface /
+   padding are overridden so the dark menu fills the whole panel. */
 .app-sidebar-mobile.p-sidebar {
-  max-width: min(20rem, 92vw);
+  max-width: min(16rem, 85vw);
+  width: var(--sidebar-width);
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1f2733;
+  padding: 0;
+}
+
+/* Mobile drawer: hide the sidebar header (PrimeReact's p-sidebar-header is
+   rendered even with showCloseIcon=false) and the brand block — the topbar
+   already carries the app identity and the hamburger toggle. */
+.app-sidebar-mobile .p-sidebar-header,
+.app-sidebar-mobile .sidebar-brand {
+  display: none;
+}
+
+/* Softer scrim than the modal-style default mask. */
+.app-sidebar-mask-mobile {
+  background: rgba(15, 23, 42, 0.35);
+}
+
+/* Theme padding on the sidebar content would inset the dark menu inside a
+   white panel — remove it so the drawer looks like the desktop sidebar. */
+.app-sidebar-mobile .p-sidebar-content {
+  padding: 0;
 }
 
 .app-main {
@@ -148,6 +188,21 @@ body {
 
 .topbar-user-name {
   font-weight: 600;
+  color: var(--muted-color);
+}
+
+/* Sidebar toggle (pi-bars): flat icon — no background/border on hover,
+   focus or active states. */
+.topbar-menu-toggle.p-button,
+.topbar-menu-toggle.p-button:hover,
+.topbar-menu-toggle.p-button:focus,
+.topbar-menu-toggle.p-button:active,
+.topbar-menu-toggle.p-button.p-focus,
+.topbar-menu-toggle.p-button:focus-visible {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
   color: var(--muted-color);
 }
 
