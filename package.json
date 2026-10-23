@@ -1,0 +1,24 @@
+{
+  "name": "booklore-react",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BookLore UI ported to React, backed by a Cloudflare Worker API with R2 object storage",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w apps/web",
+    "dev:worker": "npm run dev -w apps/worker",
+    "build": "npm run build -w apps/web && npm run build -w apps/worker",
+    "typecheck": "npm run typecheck -w apps/web && npm run typecheck -w apps/worker",
+    "test": "npm run test -w apps/web && npm run test -w apps/worker",
+    "deploy": "npm run deploy -w apps/worker"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true
+  }
+}
