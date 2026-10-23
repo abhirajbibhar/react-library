@@ -29,11 +29,13 @@ export default function App() {
             <Route path="/series" element={<SeriesBrowserPage />} />
             <Route path="/series/:seriesName" element={<SeriesPage />} />
             <Route path="/authors" element={<AuthorBrowserPage />} />
-            <Route path="/author/:authorId" element={<AuthorDetailPage />} />          <Route path="/book/:bookId" element={<BookDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/author/:authorId" element={<AuthorDetailPage />} />
+            <Route path="/book/:bookId" element={<BookDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            {/* The PDF reader sits in the layout; EPUB/CBX readers still cover
+                the viewport themselves (position: fixed). */}
+            <Route path="/read/:bookId" element={<ReaderPage />} />
           </Route>
-          {/* Readers render fullscreen, outside the app layout. */}
-          <Route path="/read/:bookId" element={<ReaderPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

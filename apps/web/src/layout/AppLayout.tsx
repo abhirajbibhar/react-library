@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sidebar } from 'primereact/sidebar';
 import { useMedia } from '../hooks/useMedia';
@@ -20,8 +20,10 @@ const SIDEBAR_COLLAPSED_KEY = 'booklore.sidebar.collapsed';
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isReaderRoute = pathname.startsWith('/read/');
   const isMobile = useMedia('(max-width: 900px)');
   const { data: setupStatus } = useSetupStatus();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -80,7 +82,7 @@ export default function AppLayout() {
       )}
       <div className="app-main">
         <Topbar user={user} isMobile={isMobile} onMenuToggle={handleMenuToggle} />
-        <div className="app-content">
+        <div className={`app-content${isReaderRoute ? ' app-content-reader' : ''}`}>
           <Outlet />
         </div>
       </div>

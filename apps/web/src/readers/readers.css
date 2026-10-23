@@ -282,30 +282,39 @@
   height: auto;
 }
 
-/* ----- PDF ----- */
+/* ----- PDF (EmbedPDF, rendered inside the app layout) ----- */
 
-.pdf-surface {
-  position: absolute;
-  inset: 0;
-  overflow: auto;
+/* Reader routes: let the page fill the area below the topbar, beside the
+   sidebar, with no padding and no outer scrolling. */
+.app-content.app-content-reader {
+  padding: 0;
+  overflow: hidden;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 16px;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.pdf-surface canvas {
-  display: block;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  background: #ffffff;
+/* Loading / not-found / unsupported states stay inside the layout instead of
+   covering it like the fullscreen EPUB and CBX readers. */
+.reader-root.reader-root-inline {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  z-index: auto;
 }
 
-.pdf-zoom-label {
-  min-width: 52px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
-  color: #94a3b8;
+.pdf-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card, #fff);
+}
+
+.pdf-page > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .reader-page-input {

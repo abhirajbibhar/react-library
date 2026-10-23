@@ -1,8 +1,7 @@
 import JSZip from 'jszip';
-import * as pdfjs from 'pdfjs-dist';
+import type { PdfEngine } from '@embedpdf/engines';
+import pdfiumWasmUrl from '../readers/pdfiumWasm';
 import type { Metadata } from '../api/types';
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 export interface ExtractedInfo {
   metadata: Metadata;
@@ -137,50 +136,62 @@ async function extractEpub(file: File): Promise<ExtractedInfo> {
 
 /* ---------------------------------- PDF --------------------------------- */
 
+// One headless PDFium engine is shared by all uploads; the wasm is only
+// loaded the first time a PDF is picked. The module is imported lazily so the
+// engine code stays out of the main bundle.
+let enginePromise: Promise<PdfEngine<Blob>> | null = null;
+
+function getPdfEngine(): Promise<PdfEngine<Blob>> {
+  if (!enginePromise) {
+    enginePromise = import('@embedpdf/engines/pdfium-direct-engine')
+      .then(({ createPdfiumEngine }) => createPdfiumEngine(pdfiumWasmUrl))
+      .catch(error => {
+        enginePromise = null; // allow a retry on the next upload
+        throw error;
+      });
+  }
+  return enginePromise;
+}
+
 async function extractPdf(file: File): Promise<ExtractedInfo> {
   const metadata: Metadata = { title: titleFromFileName(file.name) };
   let coverBlob: Blob | undefined;
 
-  const data = await file.arrayBuffer();
-  const loadingTask = pdfjs.getDocument({ data });
   try {
-    const pdfDoc = await loadingTask.promise;
-    const info = (await pdfDoc.getMetadata()).info as {
-      Title?: string;
-      Author?: string;
-      Subject?: string;
-      Keywords?: string;
-    };
-    if (info.Title?.trim()) metadata.title = info.Title.trim();
-    if (info.Author?.trim()) metadata.authors = info.Author.split(/[,;&]/).map(a => a.trim()).filter(Boolean);
-    if (info.Subject?.trim()) metadata.description = info.Subject.trim();
-    if (info.Keywords?.trim()) {
-      metadata.categories = info.Keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean);
-    }
-
+    const engine = await getPdfEngine();
+    const content = await file.arrayBuffer();
+    const doc = await engine.openDocumentBuffer({ id: `upload-${Date.now()}`, content }).toPromise();
     try {
-      const page = await pdfDoc.getPage(1);
-      const baseViewport = page.getViewport({ scale: 1 });
-      const scale = Math.min(1, 800 / baseViewport.width);
-      const viewport = page.getViewport({ scale });
-      const canvas = window.document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      const context = canvas.getContext('2d');
-      if (context) {
-        await page.render({ canvas, canvasContext: context, viewport } as never).promise;
-        coverBlob = await new Promise<Blob | undefined>(resolve =>
-          canvas.toBlob((blob: Blob | null) => resolve(blob ?? undefined), 'image/jpeg', 0.85)
-        );
+      try {
+        const info = await engine.getMetadata(doc).toPromise();
+        if (info.title?.trim()) metadata.title = info.title.trim();
+        if (info.author?.trim()) metadata.authors = info.author.split(/[,;&]/).map(a => a.trim()).filter(Boolean);
+        if (info.subject?.trim()) metadata.description = info.subject.trim();
+        if (info.keywords?.trim()) {
+          metadata.categories = info.keywords.split(/[,;]/).map(k => k.trim()).filter(Boolean);
+        }
+      } catch {
+        // Missing/corrupt info dictionary: keep the filename-derived title.
       }
-      page.cleanup();
-    } catch {
-      // A password-protected or corrupt first page simply has no cover.
+
+      try {
+        const firstPage = doc.pages[0];
+        if (firstPage) {
+          // Same target as before: at most 800px wide, JPEG at 85% quality.
+          const scaleFactor = Math.min(1, 800 / firstPage.size.width);
+          coverBlob = await engine
+            .renderPage(doc, firstPage, { scaleFactor, dpr: 1, imageType: 'image/jpeg', imageQuality: 0.85 })
+            .toPromise();
+        }
+      } catch {
+        // A corrupt first page simply has no cover.
+      }
+    } finally {
+      await engine.closeDocument(doc).toPromise().catch(() => undefined);
     }
   } catch {
-    // Unparseable PDF: fall back to filename metadata, upload proceeds.
+    // Unparseable / password-protected PDF: fall back to filename metadata, upload proceeds.
   }
-  void loadingTask;
   return { metadata, cover: coverBlob };
 }
 

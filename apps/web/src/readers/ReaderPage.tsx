@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from 'primereact/button';
 import { useAuth } from '../auth/AuthContext';
@@ -5,8 +6,10 @@ import { useBook } from '../hooks/useApi';
 import { bookProgressPercent, fileUrl } from '../api/types';
 import CbxReader from './CbxReader';
 import EbookReader from './EbookReader';
-import PdfReader from './PdfReader';
 import './readers.css';
+
+// The EmbedPDF viewer is large; load it only when a PDF is opened.
+const PdfReader = lazy(() => import('./PdfReader'));
 
 const READABLE_TYPES = new Set(['EPUB', 'PDF', 'CBX']);
 
@@ -20,7 +23,7 @@ export default function ReaderPage() {
 
   if (isLoading) {
     return (
-      <div className="reader-root">
+      <div className="reader-root reader-root-inline">
         <div className="reader-loading">
           <i className="pi pi-spinner pi-spin" />
           <span>Loading book…</span>
@@ -31,7 +34,7 @@ export default function ReaderPage() {
 
   if (!book) {
     return (
-      <div className="reader-root">
+      <div className="reader-root reader-root-inline">
         <div className="reader-message">
           <h2>Book not found</h2>
           <Button label="Back to books" link onClick={() => navigate('/all-books')} />
@@ -43,13 +46,28 @@ export default function ReaderPage() {
   const bookType = book.primaryFile?.bookType;
   if (bookType && READABLE_TYPES.has(bookType)) {
     if (bookType === 'EPUB') return <EbookReader book={book} />;
-    if (bookType === 'PDF') return <PdfReader book={book} />;
+    if (bookType === 'PDF') {
+      return (
+        <Suspense
+          fallback={
+            <div className="reader-root reader-root-inline">
+              <div className="reader-loading">
+                <i className="pi pi-spinner pi-spin" />
+                <span>Opening PDF…</span>
+              </div>
+            </div>
+          }
+        >
+          <PdfReader key={book.id} book={book} />
+        </Suspense>
+      );
+    }
     return <CbxReader book={book} />;
   }
 
   const canDownload = user?.permissions.canDownload || user?.permissions.admin;
   return (
-    <div className="reader-root">
+    <div className="reader-root reader-root-inline">
       <div className="reader-message">
         <h2>No reader for this format yet</h2>
         <p>

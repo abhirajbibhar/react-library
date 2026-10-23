@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev:web": "npm run dev -w apps/web",
+    "predev:worker": "npm run build",
     "dev:worker": "npm run dev -w apps/worker",
     "build": "npm run build -w apps/web && npm run build -w apps/worker",
     "typecheck": "npm run typecheck -w apps/web && npm run typecheck -w apps/worker",
