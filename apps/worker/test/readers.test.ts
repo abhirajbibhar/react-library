@@ -5,9 +5,12 @@ import { MockR2Bucket, asBucket } from './mock-r2';
 import { buildZip } from './zip-builder';
 
 interface TestEnv {
-  BOOKLORE: R2Bucket;
+  Library: R2Bucket;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
+  JWT_SECRET: string;
+  ADMIN_USER?: string;
+  ADMIN_PASSWORD?: string;
 }
 
 let bucket: MockR2Bucket;
@@ -20,23 +23,16 @@ function request(path: string, init?: RequestInit & { token?: string }) {
   return app.request(path, { ...rest, headers }, env);
 }
 
-async function setupAdmin(): Promise<string> {
-  const res = await request('/api/v1/setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: 'Admin',
-      username: 'admin',
-      email: 'admin@example.com',
-      password: 'password123'
-    })
-  });
-  expect(res.status).toBe(201);
+const ADMIN_USER = 'admin';
+const ADMIN_PASSWORD = 'password123';
+
+async function login(username: string, password: string): Promise<string> {
   const loginRes = await request('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'password123' })
+    body: JSON.stringify({ username, password })
   });
+  expect(loginRes.status).toBe(200);
   const body = (await loginRes.json()) as { accessToken: string };
   return body.accessToken;
 }
@@ -124,12 +120,17 @@ async function buildComic(): Promise<Uint8Array> {
   ]);
 }
 
+const JWT_SECRET = 'test-jwt-secret';
+
 beforeEach(() => {
   bucket = new MockR2Bucket();
   env = {
-    BOOKLORE: asBucket(bucket),
+    Library: asBucket(bucket),
     ASSETS: { fetch: () => new Response('') } as unknown as Fetcher,
-    ENVIRONMENT: 'development'
+    ENVIRONMENT: 'development',
+    JWT_SECRET,
+    ADMIN_USER,
+    ADMIN_PASSWORD
   };
 });
 
@@ -171,7 +172,7 @@ describe('zip reader', () => {
 
 describe('epub reader endpoints', () => {
   it('serves book info with resolved manifest, sizes, spine, toc and metadata', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Dune.epub', await buildEpub());
 
     const res = await request(`/api/v1/epub/${book.id}/info`, { token });
@@ -212,7 +213,7 @@ describe('epub reader endpoints', () => {
   });
 
   it('serves epub resources with content types, via header or ?token auth', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Dune.epub', await buildEpub());
 
     const css = await request(`/api/v1/epub/${book.id}/file/OEBPS/style.css`, { token });
@@ -233,7 +234,7 @@ describe('epub reader endpoints', () => {
   });
 
   it('rejects non-epub books and unknown ids', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const notEpub = await upload(token, 'Comic.cbz', await buildComic());
     const wrongType = await request(`/api/v1/epub/${notEpub.id}/info`, { token });
     expect(wrongType.status).toBe(400);
@@ -245,7 +246,7 @@ describe('epub reader endpoints', () => {
 
 describe('cbx reader endpoints', () => {
   it('lists pages in natural order', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Comic.cbz', await buildComic());
 
     const res = await request(`/api/v1/cbx/${book.id}/pages`, { token });
@@ -254,7 +255,7 @@ describe('cbx reader endpoints', () => {
   });
 
   it('serves individual page images with caching and 404s out-of-range pages', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Comic.cbz', await buildComic());
 
     const page2 = await request(`/api/v1/media/book/${book.id}/cbx/pages/2?token=${token}`);
@@ -270,7 +271,7 @@ describe('cbx reader endpoints', () => {
   });
 
   it('rejects RAR-based cbr books with a clear message', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Batman.cbr', await buildComic());
 
     const res = await request(`/api/v1/cbx/${book.id}/pages`, { token });
@@ -282,7 +283,7 @@ describe('cbx reader endpoints', () => {
 
 describe('reading progress', () => {
   it('stores epub progress and stamps lastReadTime', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Dune.epub', await buildEpub());
 
     const res = await request('/api/v1/books/progress', {
@@ -309,7 +310,7 @@ describe('reading progress', () => {
   });
 
   it('stores pdf and cbx page progress together', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Comic.cbz', await buildComic());
 
     const res = await request('/api/v1/books/progress', {
@@ -332,7 +333,7 @@ describe('reading progress', () => {
   });
 
   it('validates progress payloads', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await upload(token, 'Dune.epub', await buildEpub());
 
     const post = (body: unknown) =>

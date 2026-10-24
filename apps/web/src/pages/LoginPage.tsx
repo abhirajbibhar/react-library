@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { Message } from 'primereact/message';
@@ -23,13 +23,15 @@ export default function LoginPage() {
     if (user) navigate('/all-books', { replace: true });
   }, [user, navigate]);
 
-  if (setupStatus?.setupRequired) {
-    return <Navigate to="/setup" replace />;
-  }
+  const setupRequired = setupStatus?.setupRequired ?? false;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+    if (setupRequired && !username && !password) {
+      setError('No admin account exists. Set ADMIN_USER and ADMIN_PASSWORD secrets in the Cloudflare dashboard, then sign in.');
+      return;
+    }
     setSubmitting(true);
     try {
       await login(username, password);

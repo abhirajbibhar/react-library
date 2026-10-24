@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "booklore",
+  "name": "reader",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
@@ -11,11 +11,20 @@
   },
   "r2_buckets": [
     {
-      "binding": "BOOKLORE",
-      "bucket_name": "booklore"
+      "binding": "Library",
+      "bucket_name": "reader"
     }
   ],
   "vars": {
     "ENVIRONMENT": "production"
   },
+
+  "previews": {
+    "r2_buckets": [
+      {
+        "binding": "Library",
+        "bucket_name": "reader"
+      }
+    ]
+  }
 }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { bearerToken, verifyToken } from './auth';
+import { bearerToken, tokenVersionMatches, verifyToken } from './auth';
 import { AppEnv, getStore } from './context';
 import { registerAuthRoutes } from './routes/auth';
 import { registerBookRoutes } from './routes/books';
@@ -16,14 +16,38 @@ const app = new Hono<AppEnv>();
 
 const PUBLIC_ROUTES = new Set([
   'GET /api/v1/setup/status',
-  'POST /api/v1/setup',
   'POST /api/v1/auth/login',
   'POST /api/v1/auth/refresh',
   'GET /api/v1/version'
 ]);
 
+// Security headers applied to every response (API + SPA + assets).
+// Runs after the handler so it can add headers to whichever Response the
+// handler returned (json() body, direct new Response() for file streams, etc.).
+app.use('*', async (c, next) => {
+  await next();
+  const headers = c.res.headers;
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Basic CSP: only self-origin scripts/styles/images/connect, plus the
+  // jsdelivr CDN the app loads PrimeReact/foliate from. Tighten further
+  // once you've confirmed every third-party origin the app reaches out to.
+  headers.set('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "connect-src 'self'; " +
+    "font-src 'self' data:; " +
+    "object-src 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self'"
+  );
+});
+
 app.use('/api/*', async (c, next) => {
-  c.set('store', getStore(c.env.BOOKLORE));
+  c.set('store', getStore(c.env.Library));
 
   if (PUBLIC_ROUTES.has(`${c.req.method} ${c.req.path}`)) {
     return next();
@@ -44,6 +68,9 @@ app.use('/api/*', async (c, next) => {
   const { index } = await c.get('store').read();
   const user = index.users.find(u => String(u.id) === payload.sub);
   if (!user) return c.json({ message: 'User no longer exists' }, 401);
+  if (!tokenVersionMatches(payload, user)) {
+    return c.json({ message: 'Session revoked, please sign in again' }, 401);
+  }
 
   c.set('user', user);
   return next();

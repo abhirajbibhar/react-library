@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { hashPassword, signAccessToken, signRefreshToken, verifyPassword, verifyToken } from '../src/auth';
+import {
+  hashPassword,
+  jwtSecret,
+  signAccessToken,
+  signRefreshToken,
+  verifyPassword,
+  verifyToken
+} from '../src/auth';
 import { DEFAULT_PERMISSIONS, UserRecord } from '../src/types';
 
-const env = { ENVIRONMENT: 'development' };
+const JWT_SECRET = 'test-jwt-secret';
+
+const env = { JWT_SECRET, ENVIRONMENT: 'development' };
 
 const user: UserRecord = {
   id: 1,
@@ -51,6 +60,16 @@ describe('JWT', () => {
 
   it('rejects tokens signed with a different secret', async () => {
     const token = await signAccessToken(env, user);
-    await expect(verifyToken({ ENVIRONMENT: 'development', JWT_SECRET: 'other' }, token, 'access')).rejects.toThrow();
+    await expect(verifyToken({ JWT_SECRET: 'other', ENVIRONMENT: 'development' }, token, 'access')).rejects.toThrow();
+  });
+});
+
+describe('JWT secret is required', () => {
+  it('throws when JWT_SECRET is missing', async () => {
+    await expect(jwtSecret({ ENVIRONMENT: 'production' })).rejects.toThrow();
+  });
+
+  it('throws when JWT_SECRET is missing in development too', async () => {
+    await expect(jwtSecret({ ENVIRONMENT: 'development' })).rejects.toThrow();
   });
 });

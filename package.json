@@ -13,7 +13,7 @@
     "build": "npm run build -w apps/web && npm run build -w apps/worker",
     "typecheck": "npm run typecheck -w apps/web && npm run typecheck -w apps/worker",
     "test": "npm run test -w apps/web && npm run test -w apps/worker",
-    "deploy": "npm run deploy -w apps/worker"
+    "deploy": "npm run build -w apps/web && npm run deploy -w apps/worker"
   },
   "engines": {
     "node": ">=22"

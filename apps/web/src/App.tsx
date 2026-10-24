@@ -11,13 +11,10 @@ import ReaderPage from './readers/ReaderPage';
 import SeriesBrowserPage from './pages/SeriesBrowserPage';
 import SeriesPage from './pages/SeriesPage';
 import SettingsPage from './pages/SettingsPage';
-import SetupPage from './pages/SetupPage';
-
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/setup" element={<SetupPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>

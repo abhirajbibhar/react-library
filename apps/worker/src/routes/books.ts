@@ -311,7 +311,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
       return r2Keys;
     });
 
-    if (keys.length > 0) await c.env.BOOKLORE.delete(keys);
+    if (keys.length > 0) await c.env.Library.delete(keys);
     return c.json({ deleted: ids, failedFileDeletions: [] });
   });
 
@@ -336,7 +336,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
       }
     }
 
-    const object = range ? await c.env.BOOKLORE.get(key, { range }) : await c.env.BOOKLORE.get(key);
+    const object = range ? await c.env.Library.get(key, { range }) : await c.env.Library.get(key);
     if (!object) throw new HttpError(404, 'File not found');
 
     const headers = new Headers({
@@ -370,7 +370,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
     const record = index.books.find(b => b.id === Number(c.req.param('id')));
     if (!record || !canSeeLibrary(user, record.libraryId)) throw new HttpError(404, 'Book not found');
 
-    const object = await c.env.BOOKLORE.get(coverKey(record.id));
+    const object = await c.env.Library.get(coverKey(record.id));
     if (!object) throw new HttpError(404, 'Cover not found');
 
     return new Response(object.body, {
@@ -424,11 +424,11 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
     const fileKeyFinal = fileKey(bookId, ext);
     const coverKeyFinal = coverKey(bookId);
 
-    await c.env.BOOKLORE.put(fileKeyFinal, file, {
+    await c.env.Library.put(fileKeyFinal, file, {
       httpMetadata: { contentType: file.type || MIME_BY_EXT[ext] }
     });
     if (cover) {
-      await c.env.BOOKLORE.put(coverKeyFinal, cover, {
+      await c.env.Library.put(coverKeyFinal, cover, {
         httpMetadata: { contentType: cover.type || 'image/jpeg' }
       });
     }
@@ -453,7 +453,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
       });
     } catch (error) {
       // Roll back the stored objects so no orphans are left behind.
-      await c.env.BOOKLORE.delete([fileKeyFinal, ...(cover ? [coverKeyFinal] : [])]).catch(() => undefined);
+      await c.env.Library.delete([fileKeyFinal, ...(cover ? [coverKeyFinal] : [])]).catch(() => undefined);
       throw error;
     }
 

@@ -39,7 +39,7 @@ export function registerCbxRoutes(app: Hono<AppEnv>): void {
 
   const openZip = async (c: Context<AppEnv>, record: BookRecord): Promise<ZipArchive> => {
     try {
-      return await ZipArchive.open(c.env.BOOKLORE, fileKey(record.id, EXT_OF(record.fileName)));
+      return await ZipArchive.open(c.env.Library, fileKey(record.id, EXT_OF(record.fileName)));
     } catch (cause) {
       if (cause instanceof ZipError) throw new HttpError(400, cause.message);
       throw cause;

@@ -131,6 +131,12 @@ export interface UserRecord {
   /** null means the user sees every library */
   assignedLibraryIds: number[] | null;
   createdOn: string;
+  /**
+   * Bumped whenever the password changes. Tokens carry the version they were
+   * issued under (`ver`), so a bump instantly revokes every outstanding token.
+   * Absent means 0 (password never changed since this field existed).
+   */
+  tokenVersion?: number;
 }
 
 export interface AppIndex {

@@ -7,6 +7,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   reloadUser: () => Promise<void>;
 }
 
@@ -51,7 +52,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post('/api/v1/auth/logout');
     } catch {
-      // logging out locally regardless
+    }
+    tokenStore.clear();
+    setUser(null);
+    window.location.href = '/login';
+  }, []);
+
+  const logoutAll = useCallback(async () => {
+    try {
+      await api.post('/api/v1/auth/logout-all');
+    } catch {
     }
     tokenStore.clear();
     setUser(null);
@@ -59,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, reloadUser }),
-    [user, loading, login, logout, reloadUser]
+    () => ({ user, loading, login, logout, logoutAll, reloadUser }),
+    [user, loading, login, logout, logoutAll, reloadUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

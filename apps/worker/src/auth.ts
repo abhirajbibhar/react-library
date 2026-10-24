@@ -10,6 +10,8 @@ export const REFRESH_TOKEN_TTL = '30d';
 export interface TokenPayload extends JWTPayload {
   type: 'access' | 'refresh';
   username: string;
+  /** user.tokenVersion at issue time; absent on legacy tokens (counts as 0) */
+  ver?: number;
 }
 
 /* ----------------------------- passwords ----------------------------- */
@@ -75,46 +77,54 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   return key;
 }
 
-export function jwtSecret(env: { JWT_SECRET?: string; ENVIRONMENT?: string }): Uint8Array {
-  const secret = env.JWT_SECRET;
-  if (secret) return encoder.encode(secret);
-  if (env.ENVIRONMENT === 'production') {
-    throw new Error('JWT_SECRET must be set in production (wrangler secret put JWT_SECRET)');
+/**
+ * The only JWT signing secret source: the `JWT_SECRET` worker secret.
+ * There is no fallback — if it is not set the worker fails fast on the first
+ * request that needs to sign or verify a token, rather than silently falling
+ * back to a bucket file or a well-known dev value.
+ */
+export interface JwtEnv {
+  JWT_SECRET?: string;
+  ENVIRONMENT?: string;
+  Library?: R2Bucket;
+}
+
+export async function jwtSecret(env: JwtEnv): Promise<string> {
+  if (!env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not set — this worker requires it as a Cloudflare Worker secret');
   }
-  return encoder.encode('booklore-dev-secret-change-me');
+  return env.JWT_SECRET;
 }
 
 async function signToken(
-  secret: Uint8Array,
+  secret: string,
   user: UserRecord,
   type: 'access' | 'refresh',
   ttl: string
 ): Promise<string> {
-  return new SignJWT({ username: user.username, type } satisfies Partial<TokenPayload>)
+  return new SignJWT({ username: user.username, type, ver: user.tokenVersion ?? 0 } satisfies Partial<TokenPayload>)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(String(user.id))
     .setIssuer('booklore')
     .setIssuedAt()
     .setExpirationTime(ttl)
-    .sign(await hmacKey(secretToString(secret)));
+    .sign(await hmacKey(secret));
 }
 
-const secretToString = (secret: Uint8Array) => new TextDecoder().decode(secret);
-
-export function signAccessToken(env: { JWT_SECRET?: string; ENVIRONMENT?: string }, user: UserRecord): Promise<string> {
-  return signToken(jwtSecret(env), user, 'access', ACCESS_TOKEN_TTL);
+export async function signAccessToken(env: JwtEnv, user: UserRecord): Promise<string> {
+  return signToken(await jwtSecret(env), user, 'access', ACCESS_TOKEN_TTL);
 }
 
-export function signRefreshToken(env: { JWT_SECRET?: string; ENVIRONMENT?: string }, user: UserRecord): Promise<string> {
-  return signToken(jwtSecret(env), user, 'refresh', REFRESH_TOKEN_TTL);
+export async function signRefreshToken(env: JwtEnv, user: UserRecord): Promise<string> {
+  return signToken(await jwtSecret(env), user, 'refresh', REFRESH_TOKEN_TTL);
 }
 
 export async function verifyToken(
-  env: { JWT_SECRET?: string; ENVIRONMENT?: string },
+  env: JwtEnv,
   token: string,
   expectedType: 'access' | 'refresh'
 ): Promise<TokenPayload> {
-  const { payload } = await jwtVerify(token, await hmacKey(secretToString(jwtSecret(env))), {
+  const { payload } = await jwtVerify(token, await hmacKey(await jwtSecret(env)), {
     issuer: 'booklore'
   });
   const typed = payload as TokenPayload;
@@ -122,6 +132,16 @@ export async function verifyToken(
     throw new HttpError(401, 'Invalid token type');
   }
   return typed;
+}
+
+/**
+ * True while `payload` was issued under the user's current tokenVersion.
+ * Password changes bump the version, so every older token (access or refresh)
+ * stops being accepted for that user. Legacy tokens with no `ver` claim count
+ * as version 0, matching users whose password never changed.
+ */
+export function tokenVersionMatches(payload: TokenPayload, user: UserRecord): boolean {
+  return (payload.ver ?? 0) === (user.tokenVersion ?? 0);
 }
 
 export function bearerToken(authorization: string | undefined): string | null {

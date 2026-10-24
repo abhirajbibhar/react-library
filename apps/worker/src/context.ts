@@ -3,10 +3,16 @@ import type { UserRecord } from './types';
 
 export interface AppEnv {
   Bindings: {
-    BOOKLORE: R2Bucket;
+    Library: R2Bucket;
     ASSETS: Fetcher;
+    /** Required: the only JWT signing key. No fallback — the worker fails fast
+     *  on first use if this is not set. */
     JWT_SECRET?: string;
     ENVIRONMENT?: string;
+    /** One-time bootstrap: initial admin username (with ADMIN_PASSWORD). */
+    ADMIN_USER?: string;
+    /** One-time bootstrap: initial admin password (with ADMIN_USER). */
+    ADMIN_PASSWORD?: string;
   };
   Variables: {
     user: UserRecord;

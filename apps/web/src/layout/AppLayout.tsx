@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from 'primereact/sidebar';
 import { useMedia } from '../hooks/useMedia';
-import { useSetupStatus } from '../hooks/useApi';
 import { useAuth } from '../auth/AuthContext';
 import SidebarMenu from './SidebarMenu';
 import Topbar from './Topbar';
@@ -19,13 +17,10 @@ import Topbar from './Topbar';
 const SIDEBAR_COLLAPSED_KEY = 'booklore.sidebar.collapsed';
 
 export default function AppLayout() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const isReaderRoute = pathname.startsWith('/read/');
   const isMobile = useMedia('(max-width: 900px)');
-  const { data: setupStatus } = useSetupStatus();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
@@ -52,14 +47,6 @@ export default function AppLayout() {
   useEffect(() => {
     if (!isMobile) setMobileNavOpen(false);
   }, [isMobile]);
-
-  // First-run redirect: if the instance lost its users, send to setup.
-  useEffect(() => {
-    if (setupStatus?.setupRequired) {
-      queryClient.clear();
-      navigate('/setup');
-    }
-  }, [setupStatus, navigate, queryClient]);
 
   return (
     <div className="app-shell">

@@ -3,12 +3,25 @@ import {
   hashPassword,
   signAccessToken,
   signRefreshToken,
+  tokenVersionMatches,
   verifyPassword,
   verifyToken
 } from '../auth';
 import { AppEnv } from '../context';
 import { toUserDto } from '../dto';
+import type { IndexStore } from '../store';
 import { DEFAULT_PERMISSIONS, HttpError, UserRecord } from '../types';
+
+/**
+ * One-time bootstrap for fresh deployments: when the store has no users yet
+ * and both ADMIN_USER and ADMIN_PASSWORD worker secrets are set, create the
+ * initial admin (plus the default library) so the setup page can be skipped —
+ * sign in with those credentials straight away.
+ *
+ * The secrets are inert once any user exists: they never overwrite or add
+ * accounts, so afterwards accounts live in the index and are managed from the
+ * UI only. Name/email default to the username; edit them later in Users.
+ */
 
 const requireString = (value: unknown, field: string, min = 1): string => {
   if (typeof value !== 'string' || value.trim().length < min) {
@@ -16,67 +29,68 @@ const requireString = (value: unknown, field: string, min = 1): string => {
   }
   return value.trim();
 };
+async function ensureBootstrapAdmin(
+  env: { ADMIN_USER?: string; ADMIN_PASSWORD?: string },
+  store: IndexStore
+): Promise<void> {
+  const username = env.ADMIN_USER?.trim().toLowerCase();
+  const password = env.ADMIN_PASSWORD;
+  if (!username || !password) {
+    if (username || password) {
+      console.warn('ADMIN_USER and ADMIN_PASSWORD must both be set; skipping admin bootstrap');
+    }
+    return;
+  }
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const { index } = await store.read();
+  if (index.users.length > 0) return;
+
+  const passwordHash = await hashPassword(password);
+  await store.update(draft => {
+    if (draft.users.length > 0) return null; // another request bootstrapped first
+    const admin: UserRecord = {
+      id: ++draft.counters.user,
+      username,
+      name: username,
+      email: `${username}@admin.local`,
+      passwordHash,
+      permissions: {
+        ...DEFAULT_PERMISSIONS,
+        admin: true,
+        canUpload: true,
+        canDownload: true,
+        canDeleteBook: true,
+        canManageLibrary: true,
+        canManageUsers: true
+      },
+      assignedLibraryIds: null,
+      createdOn: new Date().toISOString()
+    };
+    draft.users.push(admin);
+
+    // Same default library the setup page would have created.
+    draft.libraries.push({
+      id: ++draft.counters.library,
+      name: 'General',
+      icon: 'pi pi-book',
+      iconType: 'PRIME_NG',
+      createdOn: new Date().toISOString()
+    });
+    return admin;
+  });
+}
 
 export function registerAuthRoutes(app: Hono<AppEnv>): void {
   app.get('/api/v1/setup/status', async c => {
     const store = c.get('store');
+    await ensureBootstrapAdmin(c.env, store);
     const { index } = await store.read();
     return c.json({ setupRequired: index.users.length === 0 });
   });
 
-  app.post('/api/v1/setup', async c => {
-    const store = c.get('store');
-    const body = await c.req.json().catch(() => ({}));
-
-    const name = requireString(body.name, 'name');
-    const username = requireString(body.username, 'username').toLowerCase();
-    const email = requireString(body.email, 'email');
-    if (!emailPattern.test(email)) throw new HttpError(400, 'email is not valid');
-    const password = requireString(body.password, 'password', 8);
-
-    const passwordHash = await hashPassword(password);
-    const user = await store.update(index => {
-      if (index.users.length > 0) {
-        throw new HttpError(409, 'Setup has already been completed');
-      }
-      const admin: UserRecord = {
-        id: ++index.counters.user,
-        username,
-        name,
-        email,
-        passwordHash,
-        permissions: {
-          ...DEFAULT_PERMISSIONS,
-          admin: true,
-          canUpload: true,
-          canDownload: true,
-          canDeleteBook: true,
-          canManageLibrary: true,
-          canManageUsers: true
-        },
-        assignedLibraryIds: null,
-        createdOn: new Date().toISOString()
-      };
-      index.users.push(admin);
-
-      // Every library needs somewhere to live; create a default one.
-      index.libraries.push({
-        id: ++index.counters.library,
-        name: 'General',
-        icon: 'pi pi-book',
-        iconType: 'PRIME_NG',
-        createdOn: new Date().toISOString()
-      });
-      return admin;
-    });
-
-    return c.json({ id: user.id }, 201);
-  });
-
   app.post('/api/v1/auth/login', async c => {
     const store = c.get('store');
+    await ensureBootstrapAdmin(c.env, store);
     const body = await c.req.json().catch(() => ({}));
     const username = requireString(body.username, 'username').toLowerCase();
     const password = requireString(body.password, 'password');
@@ -110,6 +124,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const { index } = await store.read();
     const user = index.users.find(u => String(u.id) === payload.sub);
     if (!user) throw new HttpError(401, 'User no longer exists');
+    if (!tokenVersionMatches(payload, user)) {
+      throw new HttpError(401, 'Session revoked, please sign in again');
+    }
 
     const [accessToken, refreshToken] = await Promise.all([
       signAccessToken(c.env, user),
@@ -124,6 +141,19 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/v1/auth/logout', c => {
     // Tokens are stateless JWTs; the client discards them.
+    return c.body(null, 204);
+  });
+
+  app.post('/api/v1/auth/logout-all', async c => {
+    const store = c.get('store');
+    const currentUser = c.get('user');
+    // Bumping the version invalidates every token issued to this user so far
+    // — including the one that authorized this request. All devices, this one
+    // included, must sign in again.
+    await store.update(index => {
+      const stored = index.users.find(u => u.id === currentUser.id);
+      if (stored) stored.tokenVersion = (stored.tokenVersion ?? 0) + 1;
+    });
     return c.body(null, 204);
   });
 
@@ -142,7 +172,11 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const passwordHash = await hashPassword(newPassword);
     await store.update(index => {
       const stored = index.users.find(u => u.id === currentUser.id);
-      if (stored) stored.passwordHash = passwordHash;
+      if (stored) {
+        stored.passwordHash = passwordHash;
+        // Revokes every access/refresh token issued before this change.
+        stored.tokenVersion = (stored.tokenVersion ?? 0) + 1;
+      }
     });
     return c.body(null, 204);
   });

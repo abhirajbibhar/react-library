@@ -88,7 +88,7 @@ export function registerLibraryRoutes(app: Hono<AppEnv>): void {
 
     // Best-effort cleanup of stored files; the index is already consistent.
     if (keys.length > 0) {
-      await c.env.BOOKLORE.delete(keys);
+      await c.env.Library.delete(keys);
     }
     return c.body(null, 204);
   });

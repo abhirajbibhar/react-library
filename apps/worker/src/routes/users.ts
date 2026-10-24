@@ -117,6 +117,8 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
       const user = index.users.find(u => u.id === id);
       if (!user) throw new HttpError(404, 'User not found');
       user.passwordHash = passwordHash;
+      // Revokes every access/refresh token issued before this reset.
+      user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     });
     return c.body(null, 204);
   });

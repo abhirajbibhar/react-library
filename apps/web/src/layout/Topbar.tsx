@@ -18,7 +18,7 @@ export default function Topbar({
   onMenuToggle?: () => void;
 }) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, logoutAll } = useAuth();
   const menuRef = useRef<Menu>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -27,7 +27,8 @@ export default function Topbar({
     { label: 'Settings', icon: 'pi pi-cog', command: () => navigate('/settings') },
     { label: 'Change Password', icon: 'pi pi-key', command: () => setPasswordOpen(true) },
     { separator: true },
-    { label: 'Logout', icon: 'pi pi-sign-out', command: () => void logout() }
+    { label: 'Logout', icon: 'pi pi-sign-out', command: () => void logout() },
+    { label: 'Logout everywhere', icon: 'pi pi-power-off', command: () => void logoutAll() }
   ];
 
   return (

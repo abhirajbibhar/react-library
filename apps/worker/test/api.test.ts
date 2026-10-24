@@ -3,10 +3,16 @@ import app from '../src/index';
 import { MockR2Bucket, asBucket } from './mock-r2';
 
 interface TestEnv {
-  BOOKLORE: R2Bucket;
+  Library: R2Bucket;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
+  JWT_SECRET: string;
+  ADMIN_USER?: string;
+  ADMIN_PASSWORD?: string;
 }
+
+const ADMIN_USER = 'admin';
+const ADMIN_PASSWORD = 'password123';
 
 let bucket: MockR2Bucket;
 let env: TestEnv;
@@ -18,21 +24,10 @@ function request(path: string, init?: RequestInit & { token?: string }) {
   return app.request(path, { ...rest, headers }, env);
 }
 
-async function setupAdmin(): Promise<string> {
-  const res = await request('/api/v1/setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: 'Admin',
-      username: 'admin',
-      email: 'admin@example.com',
-      password: 'password123'
-    })
-  });
-  expect(res.status).toBe(201);
-  return login('admin', 'password123');
-}
-
+/**
+ * Most tests rely on the ADMIN_USER/ADMIN_PASSWORD secrets to bootstrap the
+ * initial admin, matching how a real deployment without the setup page works.
+ */
 async function login(username: string, password: string): Promise<string> {
   const res = await request('/api/v1/auth/login', {
     method: 'POST',
@@ -57,48 +52,89 @@ async function uploadBook(token: string, fileName = 'Dune.epub', title = 'Dune')
   return (await res.json()) as { id: number; metadata: { title: string }; primaryFile: { bookType: string } };
 }
 
+const JWT_SECRET = 'test-jwt-secret';
+
 beforeEach(() => {
   bucket = new MockR2Bucket();
-  env = { BOOKLORE: asBucket(bucket), ASSETS: { fetch: () => new Response('') } as unknown as Fetcher, ENVIRONMENT: 'development' };
+  env = {
+    Library: asBucket(bucket),
+    ASSETS: { fetch: () => new Response('') } as unknown as Fetcher,
+    ENVIRONMENT: 'development',
+    JWT_SECRET,
+    ADMIN_USER,
+    ADMIN_PASSWORD
+  };
 });
 
-describe('setup and auth', () => {
-  it('reports setup required, creates admin, then reports setup complete', async () => {
-    const status = await (await request('/api/v1/setup/status')).json();
-    expect(status).toEqual({ setupRequired: true });
+describe('setup status and bootstrap', () => {
+  it('reports setup required when no ADMIN_* secrets are configured', async () => {
+    // Override env to remove the secrets.
+    env.ADMIN_USER = undefined;
+    env.ADMIN_PASSWORD = undefined;
 
-    await setupAdmin();
-
-    const after = await (await request('/api/v1/setup/status')).json();
-    expect(after).toEqual({ setupRequired: false });
+    const status = (await (await request('/api/v1/setup/status')).json()) as { setupRequired: boolean };
+    expect(status.setupRequired).toBe(true);
   });
 
-  it('rejects a second setup', async () => {
-    await setupAdmin();
-    const res = await request('/api/v1/setup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'X', username: 'x', email: 'x@example.com', password: 'password123' })
-    });
-    expect(res.status).toBe(409);
-  });
+  it('bootstraps the admin from ADMIN_USER/ADMIN_PASSWORD secrets, skipping setup', async () => {
+    const status = (await (await request('/api/v1/setup/status')).json()) as { setupRequired: boolean };
+    expect(status.setupRequired).toBe(false);
 
-  it('rejects login with the wrong password and accepts the right one', async () => {
-    await setupAdmin();
-    const bad = await request('/api/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'wrong-password' })
-    });
-    expect(bad.status).toBe(401);
-    expect(await login('admin', 'password123')).toBeTruthy();
-  });
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const users = (await (await request('/api/v1/users', { token })).json()) as {
+      username: string;
+      permissions: { admin: boolean };
+    }[];
+    expect(users).toHaveLength(1);
+    expect(users[0].username).toBe(ADMIN_USER);
+    expect(users[0].permissions.admin).toBe(true);
 
-  it('creates a default library during setup', async () => {
-    const token = await setupAdmin();
+    // The default library the setup page would have created.
     const libraries = (await (await request('/api/v1/libraries', { token })).json()) as { name: string }[];
     expect(libraries).toHaveLength(1);
     expect(libraries[0].name).toBe('General');
+  });
+
+  it('ignores bootstrap when only one of the two secrets is set', async () => {
+    env.ADMIN_USER = 'root';
+    env.ADMIN_PASSWORD = undefined;
+
+    const status = (await (await request('/api/v1/setup/status')).json()) as { setupRequired: boolean };
+    expect(status.setupRequired).toBe(true);
+  });
+
+  it('never bootstraps extra users once accounts exist', async () => {
+    // First bootstrap with the standard secrets.
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+
+    // Now set different secrets — they must be inert.
+    env.ADMIN_USER = 'root';
+    env.ADMIN_PASSWORD = 'root-secret-1';
+
+    const status = (await (await request('/api/v1/setup/status')).json()) as { setupRequired: boolean };
+    expect(status.setupRequired).toBe(false);
+
+    const bad = await request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'root', password: 'root-secret-1' })
+    });
+    expect(bad.status).toBe(401);
+
+    const users = (await (await request('/api/v1/users', { token: adminToken })).json()) as unknown[];
+    expect(users).toHaveLength(1);
+  });
+});
+
+describe('auth', () => {
+  it('rejects login with the wrong password and accepts the right one', async () => {
+    const bad = await request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: ADMIN_USER, password: 'wrong-password' })
+    });
+    expect(bad.status).toBe(401);
+    expect(await login(ADMIN_USER, ADMIN_PASSWORD)).toBeTruthy();
   });
 
   it('protects authenticated routes', async () => {
@@ -107,11 +143,10 @@ describe('setup and auth', () => {
   });
 
   it('refreshes tokens', async () => {
-    await setupAdmin();
     const loginRes = await request('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'password123' })
+      body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASSWORD })
     });
     const { refreshToken } = (await loginRes.json()) as { refreshToken: string };
     const res = await request('/api/v1/auth/refresh', {
@@ -123,11 +158,117 @@ describe('setup and auth', () => {
     const body = (await res.json()) as { accessToken: string };
     expect(body.accessToken).toBeTruthy();
   });
+
+  it('revokes old access and refresh tokens when the password changes', async () => {
+    const oldToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const loginRes = await request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASSWORD })
+    });
+    const { refreshToken: oldRefresh } = (await loginRes.json()) as { refreshToken: string };
+
+    const change = await request('/api/v1/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      token: oldToken,
+      body: JSON.stringify({ currentPassword: ADMIN_PASSWORD, newPassword: 'new-password-1' })
+    });
+    expect(change.status).toBe(204);
+
+    // Old access token no longer authenticates.
+    const rejected = await request('/api/v1/books', { token: oldToken });
+    expect(rejected.status).toBe(401);
+    expect(((await rejected.json()) as { message: string }).message).toContain('revoked');
+
+    // Old refresh token can no longer mint new access tokens.
+    const refresh = await request('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: oldRefresh })
+    });
+    expect(refresh.status).toBe(401);
+
+    // Logging in again with the new password yields a working token.
+    const freshToken = await login(ADMIN_USER, 'new-password-1');
+    expect((await request('/api/v1/books', { token: freshToken })).status).toBe(200);
+  });
+
+  it('revokes a user\u2019s tokens when an admin resets their password', async () => {
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const created = await request('/api/v1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      token: adminToken,
+      body: JSON.stringify({
+        username: 'reader',
+        name: 'Reader',
+        email: 'reader@example.com',
+        password: 'reader-password'
+      })
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: number };
+
+    const readerToken = await login('reader', 'reader-password');
+    expect((await request('/api/v1/auth/me', { token: readerToken })).status).toBe(200);
+
+    const reset = await request(`/api/v1/users/${id}/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      token: adminToken,
+      body: JSON.stringify({ password: 'reset-password-1' })
+    });
+    expect(reset.status).toBe(204);
+
+    // The reset user's sessions are dead; the admin's are untouched.
+    expect((await request('/api/v1/auth/me', { token: readerToken })).status).toBe(401);
+    expect((await request('/api/v1/auth/me', { token: adminToken })).status).toBe(200);
+
+    // And they can get back in with the new password.
+    expect(await login('reader', 'reset-password-1')).toBeTruthy();
+  });
+
+  it('kills every session on logout-all, including the caller\u2019s', async () => {
+    const deviceA = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const deviceB = await login(ADMIN_USER, ADMIN_PASSWORD);
+
+    const res = await request('/api/v1/auth/logout-all', { method: 'POST', token: deviceA });
+    expect(res.status).toBe(204);
+
+    expect((await request('/api/v1/auth/me', { token: deviceA })).status).toBe(401);
+    expect((await request('/api/v1/auth/me', { token: deviceB })).status).toBe(401);
+
+    // Signing in again restores access.
+    expect(await login(ADMIN_USER, ADMIN_PASSWORD)).toBeTruthy();
+  });
+
+  it('leaves other users signed in on logout-all', async () => {
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+    await request('/api/v1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      token: adminToken,
+      body: JSON.stringify({
+        username: 'reader',
+        name: 'Reader',
+        email: 'reader@example.com',
+        password: 'reader-password'
+      })
+    });
+    const readerToken = await login('reader', 'reader-password');
+
+    const res = await request('/api/v1/auth/logout-all', { method: 'POST', token: adminToken });
+    expect(res.status).toBe(204);
+
+    expect((await request('/api/v1/auth/me', { token: readerToken })).status).toBe(200);
+    expect((await request('/api/v1/auth/me', { token: adminToken })).status).toBe(401);
+  });
 });
 
 describe('books', () => {
   it('uploads a book with metadata and lists it', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token);
     expect(book.metadata.title).toBe('Dune');
     expect(book.primaryFile.bookType).toBe('EPUB');
@@ -137,7 +278,7 @@ describe('books', () => {
   });
 
   it('rejects unsupported file types', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const form = new FormData();
     form.set('file', new File(['x'], 'malware.exe'));
     form.set('libraryId', '1');
@@ -146,7 +287,7 @@ describe('books', () => {
   });
 
   it('updates read status and personal rating', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token);
 
     const statusRes = await request('/api/v1/books/status', {
@@ -171,7 +312,7 @@ describe('books', () => {
   });
 
   it('patches metadata', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token, 'dune.epub', 'Dune');
     const res = await request(`/api/v1/books/${book.id}`, {
       method: 'PATCH',
@@ -186,7 +327,7 @@ describe('books', () => {
   });
 
   it('streams the stored file and supports range requests', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token);
 
     const full = await request(`/api/v1/books/${book.id}/file`, { token });
@@ -201,7 +342,7 @@ describe('books', () => {
   });
 
   it('assigns and unassigns shelves', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token);
     const shelfRes = await request('/api/v1/shelves', {
       method: 'POST',
@@ -231,7 +372,7 @@ describe('books', () => {
   });
 
   it('deletes a book and removes its objects from the bucket', async () => {
-    const token = await setupAdmin();
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const book = await uploadBook(token);
     expect(bucket.keys().some(k => k.startsWith(`files/${book.id}/`))).toBe(true);
 
@@ -246,7 +387,7 @@ describe('books', () => {
 
 describe('users and permissions', () => {
   it('creates a restricted user that cannot delete books', async () => {
-    const adminToken = await setupAdmin();
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
     const createRes = await request('/api/v1/users', {
       method: 'POST',
       token: adminToken,
@@ -271,7 +412,7 @@ describe('users and permissions', () => {
   });
 
   it('hides libraries a user is not assigned to', async () => {
-    const adminToken = await setupAdmin();
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
     // second library
     await request('/api/v1/libraries', {
       method: 'POST',
@@ -298,7 +439,7 @@ describe('users and permissions', () => {
   });
 
   it('does not let non-admins manage users', async () => {
-    const adminToken = await setupAdmin();
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
     await request('/api/v1/users', {
       method: 'POST',
       token: adminToken,
