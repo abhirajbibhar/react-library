@@ -68,19 +68,25 @@ body {
 
 .app-sidebar.collapsed .menu-item-label,
 .app-sidebar.collapsed .menu-section-title,
-.app-sidebar.collapsed .menu-item-badge,
-.app-sidebar.collapsed .sidebar-brand span {
+.app-sidebar.collapsed .menu-item-badge {
   display: none;
 }
 
-/* Icon-only rail: center the brand icon and divider it from the menu icons below. */
+/* Icon-only rail: show the brand icon only — hide the username text.
+   The favicon sits centered above the menu icons. The divider below the
+   brand sits on the same horizontal line as the topbar's bottom border,
+   so the brand icon and the topbar header line up visually. */
 .app-sidebar.collapsed .sidebar-brand {
   justify-content: center;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  padding-bottom: 0.5rem;
+  align-items: center;
+  padding: 0;
+  border-bottom: none;
+  padding-bottom: 0;
   margin-bottom: 0.4rem;
+}
+
+.app-sidebar.collapsed .sidebar-brand-title {
+  display: none;
 }
 
 .app-sidebar.collapsed .menu-item {
@@ -93,11 +99,18 @@ body {
   padding: 0.25rem 0.35rem;
 }
 
-/* Icon-only rail: separate the sections with a divider between the icons. */
+/* Icon-only rail: separate the sections with a divider between the icons.
+   The first menu section sits flush at the top of the sidebar (no brand area
+   above it), so its top padding provides the breathing room instead of a
+   divider-to-brand gap. */
 .app-sidebar.collapsed .menu-section + .menu-section {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   margin-top: 0.4rem;
   padding-top: 0.5rem;
+}
+
+.app-sidebar.collapsed .menu-section:first-child {
+  padding-top: 0;
 }
 
 .app-sidebar.collapsed .menu-item-icon {
@@ -186,9 +199,24 @@ body {
   gap: 0.5rem;
 }
 
-.topbar-user-name {
-  font-weight: 600;
-  color: var(--muted-color);
+.topbar-left {
+  padding-right: 0.75rem;
+  height: 100%;
+}
+
+.topbar-right {
+  margin-left: auto;
+  height: 100%;
+}
+
+.topbar-user-btn.p-button {
+  padding: 0.45rem;
+  line-height: 1;
+}
+
+.topbar-user-btn .p-button-icon {
+  font-size: 1.15rem;
+  color: var(--text-color, #334155);
 }
 
 /* Sidebar toggle (pi-bars): flat icon — no background/border on hover,
@@ -219,10 +247,24 @@ body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-size: 1.15rem;
-  font-weight: 700;
+  padding: 0 1rem;
+  height: var(--topbar-height);
+}
+
+.sidebar-brand-icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.sidebar-brand-title {
+  font-size: 1rem;
+  font-weight: 600;
   color: #fff;
-  padding: 0.65rem 1rem 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .menu-section {
@@ -831,6 +873,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  margin-inline: auto;
 }
 
 .detail-cover {
@@ -852,10 +895,30 @@ body {
 .detail-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .detail-actions .p-button {
-  flex: 1;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.detail-left {
+  width: 15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+  margin-inline: auto;
+}
+
+@media (max-width: 900px) {  .detail-left {
+    align-items: center;
+    width: 100%;
+    max-width: 18rem;
+    margin-inline: auto;
+  }
 }
 
 .detail-file-info {
@@ -1099,5 +1162,6 @@ body {
   .detail-left {
     width: 100%;
     max-width: 18rem;
+    align-items: center;
   }
 }

@@ -40,7 +40,7 @@ function MenuSection({
   );
 }
 
-export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean }) {
+export default function SidebarMenu({ collapsed = false, user = null }: { collapsed?: boolean; user?: { name: string; username: string } | null }) {
   const { data: books } = useBooks();
   const { data: libraries } = useLibraries();
   const { data: shelves } = useShelves();
@@ -88,8 +88,12 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
   return (
     <div className="sidebar-menu">
       <div className="sidebar-brand">
-        <i className="pi pi-book" />
-        <span>BookLore</span>
+        <img
+          src="/favicon.svg"
+          alt="Brand"
+          className="sidebar-brand-icon"
+        />
+        <span className="sidebar-brand-title">{user?.username ?? 'BookLore'}</span>
       </div>
       {/* Icon-rail labels: PrimeReact resolves each target's text from its
           data-pr-tooltip attribute, so the tooltip stays mounted (binding

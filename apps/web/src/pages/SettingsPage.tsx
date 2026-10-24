@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from 'primereact/button';
 import { Checkbox } from 'primereact/checkbox';
@@ -11,7 +11,6 @@ import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
 import { TabView, TabPanel } from 'primereact/tabview';
 import { Toast } from 'primereact/toast';
-import { useRef } from 'react';
 import { api } from '../api/client';
 import type { Library, Permissions, Shelf, User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -527,6 +526,99 @@ function UsersTab() {
 
 /* --------------------------------- page --------------------------------- */
 
+function AccountTab() {
+  const toast = useRef<Toast>(null);
+  const { logoutAll } = useAuth();
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const update = (key: keyof typeof form) => (event: { target: { value: string } }) =>
+    setForm(current => ({ ...current, [key]: event.target.value }));
+
+  const submitPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    if (form.newPassword !== form.confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post('/api/v1/auth/password', {
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword
+      });
+      toast.current?.show({ severity: 'success', summary: 'Password changed', life: 2500 });
+      setForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change password');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const clearSession = async () => {
+    try {
+      await logoutAll();
+    } catch {
+      // worst case the tokens are still cleared below
+    }
+    window.location.href = '/login';
+  };
+
+  return (
+    <div className="settings-tab">
+      <Toast ref={toast} />
+      <div className="settings-tab-header">
+        <h3>Account</h3>
+      </div>
+      <form onSubmit={submitPassword} className="settings-form">
+        <label htmlFor="settings-current-password">Current Password</label>
+        <Password
+          id="settings-current-password"
+          value={form.currentPassword}
+          onChange={update('currentPassword')}
+          feedback={false}
+          toggleMask
+          required
+        />
+        <label htmlFor="settings-new-password">New Password</label>
+        <Password
+          id="settings-new-password"
+          value={form.newPassword}
+          onChange={update('newPassword')}
+          feedback={false}
+          toggleMask
+          required
+          minLength={8}
+        />
+        <label htmlFor="settings-confirm-password">Confirm New Password</label>
+        <Password
+          id="settings-confirm-password"
+          value={form.confirmPassword}
+          onChange={update('confirmPassword')}
+          feedback={false}
+          toggleMask
+          required
+        />
+        {error && <Message severity="error" text={error} className="auth-message" />}
+        <Button label="Change Password" type="submit" loading={submitting} className="mt-2" />
+      </form>
+      <div className="settings-form">
+        <Button
+          label="Logout everywhere"
+          icon="pi pi-power-off"
+          severity="danger"
+          outlined
+          onClick={clearSession}
+          className="mt-2"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
 
@@ -549,6 +641,9 @@ export default function SettingsPage() {
             <UsersTab />
           </TabPanel>
         )}
+        <TabPanel header="Account">
+          <AccountTab />
+        </TabPanel>
       </TabView>
     </div>
   );

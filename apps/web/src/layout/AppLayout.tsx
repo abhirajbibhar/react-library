@@ -64,11 +64,11 @@ export default function AppLayout() {
         </Sidebar>
       ) : (
         <aside className={`app-sidebar${collapsed ? ' collapsed' : ''}`}>
-          <SidebarMenu collapsed={collapsed} />
+          <SidebarMenu collapsed={collapsed} user={user} />
         </aside>
       )}
       <div className="app-main">
-        <Topbar user={user} isMobile={isMobile} onMenuToggle={handleMenuToggle} />
+        <Topbar isMobile={isMobile} onMenuToggle={handleMenuToggle} />
         <div className={`app-content${isReaderRoute ? ' app-content-reader' : ''}`}>
           <Outlet />
         </div>

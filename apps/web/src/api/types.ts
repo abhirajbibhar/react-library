@@ -165,8 +165,16 @@ export interface ReadingProgressUpdate {
   cbxProgress?: PageProgressUpdate;
 }
 
-export const coverUrl = (book: Book): string =>
-  book.coverUpdatedOn ? `/api/v1/books/${book.id}/cover?t=${encodeURIComponent(book.coverUpdatedOn)}` : '';
+import { tokenStore } from '../api/client';
+
+export const coverUrl = (book: Pick<Book, 'id' | 'coverUpdatedOn'>): string => {
+  if (!book.coverUpdatedOn) return '';
+  const params = new URLSearchParams();
+  params.set('t', book.coverUpdatedOn);
+  const token = tokenStore.access;
+  if (token) params.set('token', token);
+  return `/api/v1/books/${book.id}/cover?${params.toString()}`;
+};
 
 export const fileUrl = (bookId: number): string => `/api/v1/books/${bookId}/file`;
 

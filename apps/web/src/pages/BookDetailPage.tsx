@@ -9,7 +9,7 @@ import { Rating } from 'primereact/rating';
 import { Tag } from 'primereact/tag';
 import { Toast } from 'primereact/toast';
 import { useRef } from 'react';
-import { bookProgressPercent, fileUrl } from '../api/types';
+import { bookProgressPercent, coverUrl } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useBook, useBooks, useDeleteBooks, useUpdateBookMetadata, useUpdateBookStatus, useUpdatePersonalRating } from '../hooks/useApi';
 import { formatDate, formatFileSize, READ_STATUS_OPTIONS } from '../utils/format';
@@ -105,8 +105,8 @@ export default function BookDetailPage() {
       <div className="detail-columns">
         <div className="detail-left">
           <div className="detail-cover">
-            {book.coverUpdatedOn ? (
-              <img src={`/api/v1/books/${book.id}/cover?t=${encodeURIComponent(book.coverUpdatedOn)}`} alt={metadata.title} />
+            {coverUrl(book) ? (
+              <img src={coverUrl(book)} alt={metadata.title} />
             ) : (
               <div className="book-cover-placeholder detail-cover-placeholder">
                 <i className="pi pi-book" />
@@ -122,14 +122,6 @@ export default function BookDetailPage() {
                 onClick={() => navigate(`/read/${book.id}`)}
               />
             )}
-            <Button
-              label="Download"
-              icon="pi pi-download"
-              className="p-button-outlined"
-              onClick={() => {
-                window.location.href = fileUrl(book.id);
-              }}
-            />
             {user?.permissions.canDeleteBook && (
               <Button label="Delete" icon="pi pi-trash" severity="danger" outlined onClick={confirmDelete} />
             )}
@@ -287,7 +279,7 @@ function SeriesSiblingCard({
     <div className="book-card" onClick={() => navigate(`/book/${bookId}`)} role="button" tabIndex={0}>
       <div className="book-card-cover">
         {coverUpdatedOn ? (
-          <img src={`/api/v1/books/${bookId}/cover?t=${encodeURIComponent(coverUpdatedOn)}`} alt={title} loading="lazy" />
+          <img src={coverUrl({ id: bookId, coverUpdatedOn })} alt={title} loading="lazy" />
         ) : (
           <div className="book-cover-placeholder">
             <i className="pi pi-book" />

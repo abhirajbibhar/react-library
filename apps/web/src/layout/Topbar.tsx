@@ -4,35 +4,28 @@ import { Button } from 'primereact/button';
 import { Menu } from 'primereact/menu';
 import type { MenuItem } from 'primereact/menuitem';
 import { useAuth } from '../auth/AuthContext';
-import type { User } from '../api/types';
 import UploadDialog from '../components/UploadDialog';
-import ChangePasswordDialog from '../components/ChangePasswordDialog';
 
 export default function Topbar({
-  user,
   isMobile,
   onMenuToggle
 }: {
-  user: User | null;
   isMobile: boolean;
   onMenuToggle?: () => void;
 }) {
   const navigate = useNavigate();
-  const { logout, logoutAll } = useAuth();
+  const { user, logout } = useAuth();
   const menuRef = useRef<Menu>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const userMenuItems: MenuItem[] = [
     { label: 'Settings', icon: 'pi pi-cog', command: () => navigate('/settings') },
-    { label: 'Change Password', icon: 'pi pi-key', command: () => setPasswordOpen(true) },
-    { separator: true },
-    { label: 'Logout', icon: 'pi pi-sign-out', command: () => void logout() },
-    { label: 'Logout everywhere', icon: 'pi pi-power-off', command: () => void logoutAll() }
+    { label: 'Logout', icon: 'pi pi-sign-out', command: () => void logout() }
   ];
 
   return (
     <header className="app-topbar">
+      {/* Left block: hamburger toggle only */}
       <div className="topbar-left">
         <Button
           icon="pi pi-bars"
@@ -42,8 +35,9 @@ export default function Topbar({
           onClick={onMenuToggle}
           aria-label={isMobile ? 'Open menu' : 'Toggle sidebar'}
         />
-        <span className="topbar-user-name">{user?.name ?? ''}</span>
       </div>
+
+      {/* Right block: upload + user icon dropdown */}
       <div className="topbar-right">
         {user?.permissions.canUpload && (
           <Button
@@ -61,10 +55,10 @@ export default function Topbar({
           severity="secondary"
           onClick={event => menuRef.current?.toggle(event)}
           aria-label="User menu"
+          className="topbar-user-btn"
         />
       </div>
       <UploadDialog visible={uploadOpen} onHide={() => setUploadOpen(false)} />
-      <ChangePasswordDialog visible={passwordOpen} onHide={() => setPasswordOpen(false)} />
     </header>
   );
 }
