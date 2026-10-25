@@ -17,6 +17,8 @@ import BookFilterPanel from '../components/BookFilterPanel';
 import CardGrid from '../components/CardGrid';
 import PageHeader from '../components/PageHeader';
 import SearchField from '../components/SearchField';
+import { THIN_SCROLL } from '../utils/scroll';
+import { tip } from '../utils/tooltip';
 import { EmptyState } from '../components/States';
 import ShelfAssignerDialog from '../components/ShelfAssignerDialog';
 import { coverUrl } from '../api/types';
@@ -151,7 +153,13 @@ export default function BookBrowserPage() {
   const renderGrid = () => (
     <CardGrid>
       {sorted.map(book => (
-        <BookCard key={book.id} book={book} selected={selectedIds.has(book.id)} onToggleSelect={b => toggleSelect(b)} />
+        <BookCard
+          key={book.id}
+          book={book}
+          selected={selectedIds.has(book.id)}
+          selectionActive={selectedIds.size > 0}
+          onToggleSelect={b => toggleSelect(b)}
+        />
       ))}
     </CardGrid>
   );
@@ -194,10 +202,12 @@ export default function BookBrowserPage() {
       dataKey="id"
       size="small"
       stripedRows
+      tableClassName="white-space-nowrap"
       paginator
       rows={50}
       rowsPerPageOptions={[25, 50, 100]}
       scrollable
+      pt={{ wrapper: { style: THIN_SCROLL } }}
       selectionMode="checkbox"
       selection={tableRows.filter(row => selectedIds.has(row.id))}
       onSelectionChange={event => setSelectedIds(new Set((event.value as TableRow[]).map(row => row.id)))}
@@ -259,8 +269,11 @@ export default function BookBrowserPage() {
   const selectedCount = selectedIds.size;
 
   return (
-    <div className="flex flex-column gap-3">
+    // Desktop: header + toolbar stay put while the books (and the filter card) scroll
+    // independently below them. Mobile keeps one normal page scroll.
+    <div className={`flex flex-column gap-3${isMobile ? '' : ' h-full'}`}>
       <ConfirmDialog />
+      <div className="flex flex-column gap-3 flex-shrink-0">
       <PageHeader title={title} subtitle={`${sorted.length} books`} />
 
       <Toolbar
@@ -288,7 +301,7 @@ export default function BookBrowserPage() {
               severity="secondary"
               onClick={() => setSortDir(dir => (dir === 'asc' ? 'desc' : 'asc'))}
               aria-label="Toggle sort direction"
-              tooltip="Toggle sort direction"
+              {...tip('Toggle sort direction')}
             />
             <SelectButton
               value={viewMode}
@@ -307,14 +320,18 @@ export default function BookBrowserPage() {
               badgeClassName="p-badge-danger"
               onClick={() => setFilterPanelOpen(open => !open)}
               aria-label="Filters"
-              tooltip="Filters"
+              {...tip('Filters')}
             />
           </div>
         }
       />
+      </div>
 
-      <div className="flex gap-3 align-items-start">
-        <div className="flex-1 min-w-0">
+      <div className={`flex gap-3 align-items-start${isMobile ? '' : ' flex-1 min-h-0'}`}>
+        <div
+          className={`flex-1 min-w-0${isMobile ? '' : ' h-full overflow-y-auto pb-2'}`}
+          style={isMobile ? undefined : THIN_SCROLL}
+        >
           {isLoading && (
             <CardGrid>
               {Array.from({ length: 12 }).map((_, index) => (
@@ -347,8 +364,12 @@ export default function BookBrowserPage() {
 
       {selectedCount > 0 && (
         <Toolbar
-          className="shadow-4 border-round-xl z-5 gap-2"
-          style={{ position: 'fixed', left: '50%', bottom: '1rem', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 1rem)' }}
+          className={`shadow-4 z-5 gap-2 ${isMobile ? 'border-noround' : 'border-round-xl'}`}
+          style={
+            isMobile
+              ? { position: 'fixed', left: 0, right: 0, bottom: 0 }
+              : { position: 'fixed', left: '50%', bottom: '1rem', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 1rem)' }
+          }
           start={
             <span className="flex align-items-center gap-2 white-space-nowrap font-medium">
               <i className="pi pi-check-circle text-primary" /> {selectedCount} selected
@@ -360,7 +381,7 @@ export default function BookBrowserPage() {
                 icon="pi pi-bookmark-fill"
                 outlined
                 aria-label="Assign to shelf"
-                tooltip="Assign to shelf"
+                {...tip('Assign to shelf')}
                 onClick={() => setAssignerOpen(true)}
               />
               {entityType === 'shelf' && (
@@ -368,7 +389,7 @@ export default function BookBrowserPage() {
                   icon="pi pi-bookmark"
                   outlined
                   aria-label="Remove from this shelf"
-                  tooltip="Remove from this shelf"
+                  {...tip('Remove from this shelf')}
                   onClick={unshelf}
                 />
               )}
@@ -376,12 +397,13 @@ export default function BookBrowserPage() {
                 value={null}
                 options={READ_STATUS_OPTIONS}
                 onChange={event => changeStatus(event.value as ReadStatus)}
-                placeholder="Set status"
+                placeholder={isMobile ? 'Status' : 'Set status'}
+                className={isMobile ? 'w-7rem' : undefined}
               />
-              <Button icon="pi pi-check-square" outlined severity="success" aria-label="Select all" tooltip="Select all" onClick={selectAll} />
-              <Button icon="pi pi-times" outlined severity="warning" aria-label="Clear selection" tooltip="Clear selection" onClick={clearSelection} />
+              <Button icon="pi pi-check-square" outlined severity="success" aria-label="Select all" {...tip('Select all')} onClick={selectAll} />
+              <Button icon="pi pi-times" outlined severity="warning" aria-label="Clear selection" {...tip('Clear selection')} onClick={clearSelection} />
               {user?.permissions.canDeleteBook && (
-                <Button icon="pi pi-trash" outlined severity="danger" aria-label="Delete selected" tooltip="Delete selected" onClick={confirmDelete} />
+                <Button icon="pi pi-trash" outlined severity="danger" aria-label="Delete selected" {...tip('Delete selected')} onClick={confirmDelete} />
               )}
             </div>
           }

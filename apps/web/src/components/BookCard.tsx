@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar } from 'primereact/avatar';
 import { Card } from 'primereact/card';
@@ -10,7 +10,13 @@ import { bookProgressPercent, coverUrl } from '../api/types';
 import type { Book } from '../api/types';
 import { READ_STATUS_ICONS, READ_STATUS_LABELS } from '../utils/format';
 
-const COVER_RATIO: CSSProperties = { aspectRatio: '2 / 3' };
+const COVER_RATIO: CSSProperties = {
+  aspectRatio: '2 / 3',
+  userSelect: 'none',
+  WebkitTouchCallout: 'none'
+};
+const LONG_PRESS_MS = 500;
+const isTouchDevice = () => window.matchMedia('(pointer: coarse)').matches;
 const TWO_LINES: CSSProperties = {
   display: '-webkit-box',
   WebkitLineClamp: 2,
@@ -31,12 +37,15 @@ export default function BookCard({
   book,
   selected,
   selectionEnabled = true,
+  selectionActive = false,
   badge,
   onToggleSelect
 }: {
   book: Book;
   selected: boolean;
   selectionEnabled?: boolean;
+  /** True while any book is selected: checkboxes stay visible and touch taps toggle. */
+  selectionActive?: boolean;
   /** Small label pinned to the top-left of the cover (e.g. a series number). */
   badge?: string;
   onToggleSelect?: (book: Book, checked: boolean) => void;
@@ -49,11 +58,48 @@ export default function BookCard({
   const cover = coverUrl(book);
   const open = () => navigate(`/book/${book.id}`);
 
+  // The select circle shows on hover/focus, while selecting, and on selected cards.
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const showCheck = selectionEnabled && (selected || selectionActive || hovered || focused);
+
+  // Touch: press and hold toggles selection; once selecting, taps toggle too.
+  const pressTimer = useRef<number | undefined>(undefined);
+  const longPressed = useRef(false);
+  const startPress = () => {
+    if (!selectionEnabled) return;
+    longPressed.current = false;
+    pressTimer.current = window.setTimeout(() => {
+      longPressed.current = true;
+      navigator.vibrate?.(15);
+      onToggleSelect?.(book, !selected);
+    }, LONG_PRESS_MS);
+  };
+  const cancelPress = () => window.clearTimeout(pressTimer.current);
+  const handleCoverClick = () => {
+    if (longPressed.current) {
+      longPressed.current = false;
+      return;
+    }
+    if (selectionEnabled && selectionActive && isTouchDevice()) {
+      onToggleSelect?.(book, !selected);
+      return;
+    }
+    open();
+  };
+
   const header = (
     <div
       className="relative overflow-hidden cursor-pointer"
       style={COVER_RATIO}
-      onClick={open}
+      onClick={handleCoverClick}
+      onTouchStart={startPress}
+      onTouchEnd={cancelPress}
+      onTouchMove={cancelPress}
+      onTouchCancel={cancelPress}
+      onContextMenu={event => {
+        if (isTouchDevice()) event.preventDefault();
+      }}
       role="button"
       tabIndex={0}
       aria-label={`Open ${title}`}
@@ -77,7 +123,13 @@ export default function BookCard({
       {selectionEnabled && (
         <div
           className="absolute top-0 left-0 m-2 p-1 flex surface-card border-round shadow-2"
+          style={{
+            opacity: showCheck ? 1 : 0,
+            pointerEvents: showCheck ? 'auto' : 'none',
+            transition: 'opacity 0.15s ease'
+          }}
           onClick={event => event.stopPropagation()}
+          onTouchStart={event => event.stopPropagation()}
         >
           <Checkbox
             checked={selected}
@@ -115,23 +167,30 @@ export default function BookCard({
   );
 
   return (
-    <Card
-      header={header}
-      className={`overflow-hidden border-2 hover:shadow-4 ${selected ? 'border-primary' : 'border-transparent'}`}
-      pt={{ body: { className: 'p-2' }, content: { className: 'p-0' } }}
+    <div
+      onPointerEnter={event => event.pointerType === 'mouse' && setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
     >
-      <div className="font-semibold text-sm line-height-2" style={TWO_LINES} title={title}>
-        {title}
-      </div>
-      {author && (
-        <div
-          className="text-color-secondary text-xs mt-1 white-space-nowrap overflow-hidden text-overflow-ellipsis"
-          title={author}
-        >
-          {author}
+      <Card
+        header={header}
+        className={`overflow-hidden border-2 hover:shadow-4 ${selected ? 'border-primary' : 'border-transparent'}`}
+        pt={{ body: { className: 'p-2' }, content: { className: 'p-0' } }}
+      >
+        <div className="font-semibold text-sm line-height-2" style={TWO_LINES} title={title}>
+          {title}
         </div>
-      )}
-    </Card>
+        {author && (
+          <div
+            className="text-color-secondary text-xs mt-1 white-space-nowrap overflow-hidden text-overflow-ellipsis"
+            title={author}
+          >
+            {author}
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 

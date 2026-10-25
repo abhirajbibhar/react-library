@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { THIN_SCROLL } from '../utils/scroll';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
@@ -19,6 +20,14 @@ interface UploadItem {
   progress: number;
   message?: string;
 }
+
+// Directory pickers exist on desktop browsers; most mobile browsers lack them.
+const FOLDER_PICKER_SUPPORTED =
+  typeof document !== 'undefined' && 'webkitdirectory' in document.createElement('input');
+const FOLDER_INPUT_PROPS = { webkitdirectory: '', directory: '' } as Record<string, string>;
+
+/** Path shown for a file: its folder path when it came from a folder pick. */
+const displayName = (file: File) => file.webkitRelativePath || file.name;
 
 const extOf = (name: string) => (name.split('.').pop() ?? '').toLowerCase();
 
@@ -53,6 +62,7 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
   const queryClient = useQueryClient();
   const toast = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const { data: libraries } = useLibraries();
 
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -69,12 +79,15 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
   const updateItem = (id: number, patch: Partial<UploadItem>) =>
     setItems(current => current.map(item => (item.id === id ? { ...item, ...patch } : item)));
 
-  const pickFiles = (fileList: FileList | null) => {
+  const pickFiles = (fileList: FileList | null, fromFolder = false) => {
     if (!fileList) return;
     const accepted: UploadItem[] = [];
     const rejected: string[] = [];
     let nextId = Date.now();
-    for (const file of Array.from(fileList)) {
+    // Keep folder contents in path order so a series uploads in reading order.
+    const files = Array.from(fileList);
+    if (fromFolder) files.sort((a, b) => displayName(a).localeCompare(displayName(b), undefined, { numeric: true }));
+    for (const file of files) {
       if (SUPPORTED_UPLOAD_EXTENSIONS.includes(extOf(file.name))) {
         accepted.push({ id: nextId++, file, status: 'queued', progress: 0 });
       } else {
@@ -84,8 +97,18 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
     if (rejected.length > 0) {
       toast.current?.show({
         severity: 'warn',
-        summary: 'Unsupported files skipped',
-        detail: rejected.join(', '),
+        summary: fromFolder
+          ? `${rejected.length} unsupported file${rejected.length === 1 ? '' : 's'} in the folder skipped`
+          : 'Unsupported files skipped',
+        detail: fromFolder ? undefined : rejected.join(', '),
+        life: 4000
+      });
+    }
+    if (fromFolder && accepted.length === 0 && rejected.length > 0) {
+      toast.current?.show({
+        severity: 'info',
+        summary: 'No supported books in that folder',
+        detail: `Supported: ${SUPPORTED_UPLOAD_EXTENSIONS.join(', ')}`,
         life: 4000
       });
     }
@@ -178,7 +201,7 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
       breakpoints={{ '640px': '95vw' }}
     >
       <Toast ref={toast} />
-      <div className="flex gap-2 mb-3">
+      <div className="flex flex-wrap gap-2 mb-3">
         <Dropdown
           value={selectedLibrary}
           options={libraryOptions}
@@ -191,6 +214,26 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
           label="Add Files"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
+        />
+        {FOLDER_PICKER_SUPPORTED && (
+          <Button
+            icon="pi pi-folder-open"
+            label="Add Folder"
+            outlined
+            onClick={() => folderInputRef.current?.click()}
+            disabled={uploading}
+          />
+        )}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          hidden
+          {...FOLDER_INPUT_PROPS}
+          onChange={event => {
+            pickFiles(event.target.files, true);
+            event.target.value = '';
+          }}
         />
         <input
           ref={fileInputRef}
@@ -208,16 +251,16 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
       {items.length === 0 ? (
         <div className="flex flex-column align-items-center gap-2 py-5 text-color-secondary border-1 border-dashed surface-border border-round">
           <i className="pi pi-cloud-upload text-4xl" />
-          <span>Choose a library, then add PDF, EPUB or comic files.</span>
+          <span>Choose a library, then add books or a whole folder.</span>
         </div>
       ) : (
-        <div className="flex flex-column overflow-y-auto" style={{ maxHeight: '20rem' }}>
+        <div className="flex flex-column overflow-y-auto" style={{ maxHeight: '20rem', ...THIN_SCROLL }}>
           {items.map(item => (
             <div key={item.id} className="flex align-items-center gap-3 py-2 border-bottom-1 surface-border">
               {statusIcon(item.status)}
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis">
-                  {item.file.name}
+                  {displayName(item.file)}
                 </div>
                 <div className="text-color-secondary text-xs">
                   {formatFileSize(Math.max(1, Math.round(item.file.size / 1024)))}

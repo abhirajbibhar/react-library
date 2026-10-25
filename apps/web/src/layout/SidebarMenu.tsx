@@ -5,6 +5,7 @@ import { Button } from 'primereact/button';
 import { Divider } from 'primereact/divider';
 import { Menu } from 'primereact/menu';
 import type { MenuItem } from 'primereact/menuitem';
+import { tip } from '../utils/tooltip';
 import { useBooks, useLibraries, useShelves } from '../hooks/useApi';
 
 interface MenuEntry {
@@ -116,8 +117,7 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
           text={!active}
           severity={active ? undefined : 'secondary'}
           aria-label={entry.label}
-          tooltip={entry.count !== undefined ? `${entry.label} (${entry.count})` : entry.label}
-          tooltipOptions={{ position: 'right' }}
+          {...tip(entry.count !== undefined ? `${entry.label} (${entry.count})` : entry.label, 'right')}
           onClick={() => navigate(entry.to)}
         />
       );
@@ -143,10 +143,18 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
 
   return (
     <div className="flex flex-column flex-1">
-      <Menu model={model} className="w-full border-none border-noround surface-card" />
+      <Menu
+        model={model}
+        className="w-full p-0 border-none border-noround surface-card"
+        pt={{
+          submenuHeader: {
+            className: 'bg-transparent text-xs uppercase font-medium text-color-secondary px-3 pt-3 pb-1'
+          }
+        }}
+      />
       <Menu
         model={[toMenuItem(SETTINGS_ENTRY, pathname)]}
-        className="w-full border-none border-noround surface-card mt-auto"
+        className="w-full p-0 pb-2 border-none border-noround surface-card mt-auto"
       />
     </div>
   );

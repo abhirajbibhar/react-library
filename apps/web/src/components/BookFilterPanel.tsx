@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { Accordion, AccordionTab } from 'primereact/accordion';
 import { Badge } from 'primereact/badge';
 import { Button } from 'primereact/button';
-import { Panel } from 'primereact/panel';
+import { Card } from 'primereact/card';
 import { Sidebar } from 'primereact/sidebar';
 import { buildFacets, FILTER_LABELS, isFilterActive, type FilterSelection, type FilterType } from '../utils/filters';
 import type { Book } from '../api/types';
+import { BELOW_TOPBAR_MASK } from '../layout/constants';
+import { THIN_SCROLL } from '../utils/scroll';
+import { tip } from '../utils/tooltip';
 import CheckRow from './CheckRow';
 import SearchField from './SearchField';
 
@@ -63,7 +66,7 @@ export default function BookFilterPanel({
             severity="secondary"
             onClick={onClear}
             aria-label="Clear all filters"
-            tooltip="Clear all filters"
+            {...tip('Clear all filters')}
           />
         )}
       </div>
@@ -90,7 +93,7 @@ export default function BookFilterPanel({
                   </span>
                 }
               >
-                <div className="flex flex-column gap-2 overflow-y-auto" style={{ maxHeight: '16rem' }}>
+                <div className="flex flex-column gap-2 overflow-y-auto" style={{ maxHeight: '16rem', ...THIN_SCROLL }}>
                   {facet.values.map(value => (
                     <CheckRow
                       key={String(value.id)}
@@ -112,19 +115,30 @@ export default function BookFilterPanel({
 
   if (isMobile) {
     return (
-      <Sidebar visible={visible} onHide={onHide} position="right" header="Filters" className="w-20rem">
+      <Sidebar
+        visible={visible}
+        onHide={onHide}
+        position="right"
+        className="w-20rem"
+        blockScroll
+        showCloseIcon={false}
+        pt={{
+          mask: { style: BELOW_TOPBAR_MASK },
+          header: { className: 'hidden' },
+          content: { className: 'p-3', style: THIN_SCROLL }
+        }}
+      >
         {body}
       </Sidebar>
     );
   }
 
   if (!visible) return null;
+  // Starts with the search field, grows with its content and stops at the screen edge
+  // (the parent row has a fixed height, so maxHeight 100% scrolls inside the card).
   return (
-    <div
-      className="sticky top-0 flex-shrink-0 overflow-y-auto"
-      style={{ width: '19rem', maxHeight: 'calc(100vh - 11rem)' }}
-    >
-      <Panel header="Filters">{body}</Panel>
+    <div className="flex-shrink-0 overflow-y-auto" style={{ width: '19rem', maxHeight: '100%', ...THIN_SCROLL }}>
+      <Card pt={{ body: { className: 'p-3' }, content: { className: 'p-0' } }}>{body}</Card>
     </div>
   );
 }

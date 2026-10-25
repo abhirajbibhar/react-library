@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { THIN_SCROLL } from '../utils/scroll';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
 import { Toast } from 'primereact/toast';
@@ -91,7 +92,7 @@ export default function ShelfAssignerDialog({
     >
       <Toast ref={toast} />
       {shelves && shelves.length > 0 ? (
-        <div className="flex flex-column gap-3 overflow-y-auto" style={{ maxHeight: '20rem' }}>
+        <div className="flex flex-column gap-3 overflow-y-auto" style={{ maxHeight: '20rem', ...THIN_SCROLL }}>
           {shelves.map(shelf => (
             <CheckRow
               key={shelf.id}

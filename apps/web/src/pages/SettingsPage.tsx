@@ -15,6 +15,7 @@ import { Toast } from 'primereact/toast';
 import { api } from '../api/client';
 import type { Library, Permissions, Shelf, User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { tip } from '../utils/tooltip';
 import FormField from '../components/FormField';
 import PageHeader from '../components/PageHeader';
 import { queryKeys, useLibraries, useShelves, useUsers } from '../hooks/useApi';
@@ -122,14 +123,14 @@ function LibrariesTab() {
             style={{ width: '9rem' }}
             body={library => (
               <div className="flex gap-1">
-                <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(library)} tooltip="Edit" />
+                <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(library)} {...tip('Edit')} />
                 <Button
                   icon="pi pi-trash"
                   text
                   size="small"
                   severity="danger"
                   onClick={() => remove(library)}
-                  tooltip="Delete"
+                  {...tip('Delete')}
                 />
               </div>
             )}
@@ -246,14 +247,14 @@ function ShelvesTab() {
           style={{ width: '9rem' }}
           body={shelf => (
             <div className="flex gap-1">
-              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(shelf)} tooltip="Edit" />
+              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(shelf)} {...tip('Edit')} />
               <Button
                 icon="pi pi-trash"
                 text
                 size="small"
                 severity="danger"
                 onClick={() => remove(shelf)}
-                tooltip="Delete"
+                {...tip('Delete')}
                 disabled={Boolean(shelf.userId && shelf.userId !== user?.id && !user?.permissions.admin)}
               />
             </div>
@@ -422,7 +423,7 @@ function UsersTab() {
           style={{ width: '11rem' }}
           body={target => (
             <div className="flex gap-1">
-              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(target)} tooltip="Edit" />
+              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(target)} {...tip('Edit')} />
               <Button
                 icon="pi pi-key"
                 text
@@ -431,7 +432,7 @@ function UsersTab() {
                   setPasswordReset(target);
                   setNewPassword('');
                 }}
-                tooltip="Reset password"
+                {...tip('Reset password')}
               />
               <Button
                 icon="pi pi-trash"
@@ -439,7 +440,7 @@ function UsersTab() {
                 size="small"
                 severity="danger"
                 onClick={() => remove(target)}
-                tooltip="Delete"
+                {...tip('Delete')}
                 disabled={target.id === user.id}
               />
             </div>

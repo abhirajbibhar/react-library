@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from 'primereact/sidebar';
+import { THIN_SCROLL } from '../utils/scroll';
 import { useMedia } from '../hooks/useMedia';
 import { useAuth } from '../auth/AuthContext';
 import Brand from './Brand';
+import { BELOW_TOPBAR_MASK } from './constants';
 import SidebarMenu from './SidebarMenu';
 import Topbar from './Topbar';
 
@@ -56,13 +58,21 @@ export default function AppLayout() {
 
   const brandTitle = user?.username ?? 'BookLore';
 
+  // Fixed to the viewport so the document itself never scrolls: mobile address-bar
+  // resizing and overlay scroll-chaining would otherwise move the header with the page.
   return (
-    <div className="flex h-screen overflow-hidden surface-ground text-color">
+    <div className="fixed top-0 left-0 w-full h-full flex overflow-hidden surface-ground text-color">
       {isMobile ? (
         <Sidebar
           position="left"
           className="w-18rem"
-          header={<span className="text-xl font-semibold">{brandTitle}</span>}
+          showCloseIcon={false}
+          blockScroll
+          pt={{
+            mask: { style: BELOW_TOPBAR_MASK },
+            header: { className: 'hidden' },
+            content: { className: 'p-0 flex flex-column', style: THIN_SCROLL }
+          }}
           visible={mobileNavOpen}
           onHide={() => setMobileNavOpen(false)}
         >
@@ -71,7 +81,7 @@ export default function AppLayout() {
       ) : (
         <aside
           className="flex flex-column flex-shrink-0 surface-card surface-border border-right-1 overflow-y-auto"
-          style={{ width: collapsed ? '4.5rem' : '16rem', transition: 'width 0.2s ease' }}
+          style={{ width: collapsed ? '4.5rem' : '16rem', transition: 'width 0.2s ease', ...THIN_SCROLL }}
         >
           <Brand title={brandTitle} compact={collapsed} />
           <SidebarMenu collapsed={collapsed} />
@@ -80,6 +90,7 @@ export default function AppLayout() {
       <div className="flex flex-column flex-1 min-w-0">
         <Topbar isMobile={isMobile} onMenuToggle={handleMenuToggle} />
         <main
+          style={THIN_SCROLL}
           className={
             isReaderRoute
               ? 'flex flex-column flex-1 min-h-0 overflow-hidden'

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Button } from 'primereact/button';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { Toolbar } from 'primereact/toolbar';
+import { tip } from '../utils/tooltip';
 import { FLAT_BAR_CLASS } from '../layout/constants';
 
 /** Fullscreen reader frame: covers the whole viewport above the app layout. */
@@ -69,8 +70,7 @@ export function ReaderIconButton({
       text={!active}
       severity={active ? undefined : 'secondary'}
       aria-label={title}
-      tooltip={title}
-      tooltipOptions={{ position: tooltipPosition }}
+      {...tip(title, tooltipPosition)}
       disabled={disabled}
       onClick={onClick}
     />
