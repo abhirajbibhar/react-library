@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { InputText } from 'primereact/inputtext';
+import { Avatar } from 'primereact/avatar';
+import CardGrid from '../components/CardGrid';
+import EntityCard from '../components/EntityCard';
+import PageHeader from '../components/PageHeader';
+import SearchField from '../components/SearchField';
+import { EmptyState, LoadingState } from '../components/States';
 import { useBooks } from '../hooks/useApi';
 import { deriveAuthors } from '../utils/entities';
 
 export default function AuthorBrowserPage() {
-  const navigate = useNavigate();
   const { data: books, isLoading } = useBooks();
   const [search, setSearch] = useState('');
 
@@ -16,45 +19,34 @@ export default function AuthorBrowserPage() {
   }, [authors, search]);
 
   return (
-    <div className="entity-browser">
-      <div className="browser-header">
-        <div className="browser-title">
-          <h2>Authors</h2>
-          <span className="browser-count">{visible.length} authors</span>
-        </div>
-        <div className="browser-toolbar">
-          <div className="browser-search">
-            <i className="pi pi-search" />
-            <InputText value={search} onChange={event => setSearch(event.target.value)} placeholder="Search authors" />
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-column gap-3">
+      <PageHeader title="Authors" subtitle={`${visible.length} authors`}>
+        <SearchField value={search} onChange={setSearch} placeholder="Search authors" />
+      </PageHeader>
 
-      {isLoading && <p className="muted">Loading…</p>}
+      {isLoading && <LoadingState />}
       {!isLoading && visible.length === 0 && (
-        <div className="empty-state">
-          <i className="pi pi-users" />
-          <p>{search ? 'No authors match your search.' : 'No authors yet. Upload books with embedded author metadata.'}</p>
-        </div>
+        <EmptyState
+          icon="pi-users"
+          message={search ? 'No authors match your search.' : 'No authors yet. Upload books with embedded author metadata.'}
+        />
       )}
 
-      <div className="entity-grid">
+      <CardGrid minWidth={140}>
         {visible.map(entry => (
-          <div
+          <EntityCard
             key={entry.id}
-            className="entity-card entity-card-author"
-            onClick={() => navigate(`/author/${encodeURIComponent(entry.id)}`)}
-          >
-            <div className="entity-card-avatar">
-              <i className="pi pi-user" />
-            </div>
-            <div className="entity-card-name" title={entry.name}>
-              {entry.name}
-            </div>
-            <div className="entity-card-count">{entry.books.length} books</div>
-          </div>
+            to={`/author/${encodeURIComponent(entry.id)}`}
+            name={entry.name}
+            count={`${entry.books.length} books`}
+            media={
+              <div className="flex justify-content-center pt-4">
+                <Avatar label={entry.name.charAt(0).toUpperCase()} size="xlarge" shape="circle" />
+              </div>
+            }
+          />
         ))}
-      </div>
+      </CardGrid>
     </div>
   );
 }

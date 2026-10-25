@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from 'primereact/button';
+import { InputNumber } from 'primereact/inputnumber';
+import { SelectButton } from 'primereact/selectbutton';
+import { Sidebar } from 'primereact/sidebar';
 import { Slider } from 'primereact/slider';
+import { Tree, type TreeExpandedKeysType } from 'primereact/tree';
+import type { TreeNode } from 'primereact/treenode';
 import type { Book, EpubBookInfo } from '../api/types';
 import { api, tokenStore } from '../api/client';
 import { useProgressSaver } from './progress';
@@ -12,7 +18,17 @@ import {
   type FoliateTocItem,
   type FoliateView
 } from './foliate';
-import { ReaderHeader, ReaderIconButton } from './ReaderChrome';
+import {
+  isFromDrawer,
+  ReaderBody,
+  ReaderFooter,
+  ReaderHeader,
+  ReaderIconButton,
+  ReaderLoading,
+  ReaderMessage,
+  ReaderRoot,
+  ReaderSetting
+} from './ReaderChrome';
 import { useReaderSettings, type EpubFlow, type EpubTheme } from './settings';
 import { formatPercent } from './readerUtils';
 
@@ -20,6 +36,43 @@ interface PositionState {
   cfi?: string;
   percentage: number;
   chapter?: string;
+}
+
+const THEME_OPTIONS: { label: string; value: EpubTheme }[] = [
+  { label: 'Light', value: 'light' },
+  { label: 'Sepia', value: 'sepia' },
+  { label: 'Dark', value: 'dark' },
+  { label: 'Night', value: 'night' }
+];
+const FLOW_OPTIONS: { label: string; value: EpubFlow }[] = [
+  { label: 'Paginated', value: 'paginated' },
+  { label: 'Scrolled', value: 'scrolled' }
+];
+const ALIGN_OPTIONS = [
+  { label: 'Left', value: false },
+  { label: 'Justify', value: true }
+];
+
+function toTreeNodes(items: FoliateTocItem[], prefix = ''): TreeNode[] {
+  return items.map((item, index) => {
+    const key = `${prefix}${index}`;
+    return {
+      key,
+      label: item.label,
+      data: item.href,
+      children: item.subitems && item.subitems.length > 0 ? toTreeNodes(item.subitems, `${key}-`) : undefined
+    };
+  });
+}
+
+function collectKeys(nodes: TreeNode[], into: TreeExpandedKeysType = {}): TreeExpandedKeysType {
+  for (const node of nodes) {
+    if (node.children && node.children.length > 0 && node.key !== undefined) {
+      into[String(node.key)] = true;
+      collectKeys(node.children, into);
+    }
+  }
+  return into;
 }
 
 export default function EbookReader({ book }: { book: Book }) {
@@ -154,7 +207,7 @@ export default function EbookReader({ book }: { book: Book }) {
     const onKeyDown = (event: KeyboardEvent) => {
       const view = viewRef.current;
       if (!view) return;
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLInputElement || isFromDrawer(event)) return;
       if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
         event.preventDefault();
         view.next();
@@ -175,22 +228,16 @@ export default function EbookReader({ book }: { book: Book }) {
     void viewRef.current?.goTo(href).catch(() => undefined);
   };
 
-  const renderTocItems = (items: FoliateTocItem[]) =>
-    items.map(item => (
-      <div key={`${item.href}-${item.label}`}>
-        <button type="button" className="toc-item" onClick={() => goToTocItem(item.href)}>
-          {item.label}
-        </button>
-        {item.subitems && item.subitems.length > 0 ? (
-          <div className="toc-children">{renderTocItems(item.subitems)}</div>
-        ) : null}
-      </div>
-    ));
+  const tocNodes = useMemo(() => toTreeNodes(toc), [toc]);
+  const [expandedKeys, setExpandedKeys] = useState<TreeExpandedKeysType>({});
+  useEffect(() => {
+    setExpandedKeys(collectKeys(tocNodes));
+  }, [tocNodes]);
 
   const displayedPercent = scrub ?? Math.round(position.percentage);
 
   return (
-    <div className="reader-root">
+    <ReaderRoot>
       <ReaderHeader
         title={book.metadata.title ?? book.fileName}
         subtitle={position.chapter}
@@ -215,145 +262,133 @@ export default function EbookReader({ book }: { book: Book }) {
         }
       />
 
-      <div className="reader-body" onClick={() => setSettingsOpen(false)}>
+      <ReaderBody>
         <div
           ref={surfaceRef}
-          className="epub-surface"
+          className="absolute top-0 left-0 w-full h-full"
           style={{ background: EPUB_THEMES[settings.theme].bg }}
         />
 
-        {tocOpen ? (
-          <>
-            <div className="reader-toc-backdrop" onClick={() => setTocOpen(false)} />
-            <nav className="reader-toc" onClick={event => event.stopPropagation()}>
-              <h3>Contents</h3>
-              {renderTocItems(toc)}
-            </nav>
-          </>
-        ) : null}
-
-        {settingsOpen ? (
-          <div className="reader-settings" onClick={event => event.stopPropagation()}>
-            <div className="reader-settings-row">
-              <label>Theme</label>
-              <div className="reader-seg">
-                {(['light', 'sepia', 'dark', 'night'] as EpubTheme[]).map(theme => (
-                  <button
-                    key={theme}
-                    type="button"
-                    className={`seg-option${settings.theme === theme ? ' active' : ''}`}
-                    onClick={() => updateSettings({ theme })}
-                  >
-                    {theme}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Font size</label>
-              <div className="reader-seg">
-                <button
-                  type="button"
-                  className="seg-option"
-                  onClick={() => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) })}
-                >
-                  A−
-                </button>
-                <span className="seg-option" aria-hidden="true">
-                  {settings.fontSize}px
-                </span>
-                <button
-                  type="button"
-                  className="seg-option"
-                  onClick={() => updateSettings({ fontSize: Math.min(32, settings.fontSize + 1) })}
-                >
-                  A+
-                </button>
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Layout</label>
-              <div className="reader-seg">
-                {(['paginated', 'scrolled'] as EpubFlow[]).map(flow => (
-                  <button
-                    key={flow}
-                    type="button"
-                    className={`seg-option${settings.flow === flow ? ' active' : ''}`}
-                    onClick={() => updateSettings({ flow })}
-                  >
-                    {flow}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Alignment</label>
-              <div className="reader-seg">
-                <button
-                  type="button"
-                  className={`seg-option${!settings.justify ? ' active' : ''}`}
-                  onClick={() => updateSettings({ justify: false })}
-                >
-                  Left
-                </button>
-                <button
-                  type="button"
-                  className={`seg-option${settings.justify ? ' active' : ''}`}
-                  onClick={() => updateSettings({ justify: true })}
-                >
-                  Justify
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {loading ? (
-          <div className="reader-loading">
-            <i className="pi pi-spinner pi-spin" />
-            <span>Opening book…</span>
-          </div>
-        ) : null}
-
+        {loading ? <ReaderLoading label="Opening book…" /> : null}
         {error ? (
-          <div className="reader-message">
-            <h2>Could not open this book</h2>
-            <p>{error}</p>
-          </div>
+          <ReaderMessage title="Could not open this book">
+            <p className="m-0">{error}</p>
+          </ReaderMessage>
         ) : null}
-      </div>
+      </ReaderBody>
 
-      <footer className="reader-footer">
+      <Sidebar
+        visible={tocOpen}
+        onHide={() => setTocOpen(false)}
+        position="left"
+        header="Contents"
+        className="w-full md:w-24rem"
+      >
+        <Tree
+          value={tocNodes}
+          expandedKeys={expandedKeys}
+          onToggle={event => setExpandedKeys(event.value)}
+          filter
+          filterMode="lenient"
+          filterPlaceholder="Search contents"
+          className="border-none p-0"
+          nodeTemplate={node => (
+            <Button
+              type="button"
+              label={node.label}
+              text
+              severity="secondary"
+              size="small"
+              className="p-0 text-left justify-content-start"
+              onClick={() => goToTocItem(String(node.data))}
+            />
+          )}
+        />
+      </Sidebar>
+
+      <Sidebar
+        visible={settingsOpen}
+        onHide={() => setSettingsOpen(false)}
+        position="right"
+        header="Reader settings"
+        className="w-full md:w-20rem"
+      >
+        <div className="flex flex-column gap-4">
+          <ReaderSetting label="Theme">
+            <SelectButton
+              value={settings.theme}
+              options={THEME_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ theme: event.value as EpubTheme })}
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Font size">
+            <InputNumber
+              value={settings.fontSize}
+              onValueChange={event => {
+                if (event.value != null) updateSettings({ fontSize: event.value });
+              }}
+              min={10}
+              max={32}
+              suffix=" px"
+              showButtons
+              buttonLayout="horizontal"
+              className="w-full"
+              inputClassName="w-full text-center"
+              aria-label="Font size"
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Layout">
+            <SelectButton
+              value={settings.flow}
+              options={FLOW_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ flow: event.value as EpubFlow })}
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Alignment">
+            <SelectButton
+              value={settings.justify}
+              options={ALIGN_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ justify: Boolean(event.value) })}
+            />
+          </ReaderSetting>
+        </div>
+      </Sidebar>
+
+      <ReaderFooter>
         <ReaderIconButton
           icon="pi-chevron-left"
           title="Previous page"
+          tooltipPosition="top"
           disabled={loading}
           onClick={() => viewRef.current?.prev()}
         />
-        <div className="reader-slider">
-          <Slider
-            value={displayedPercent}
-            min={0}
-            max={100}
-            disabled={loading}
-            onChange={event => setScrub(event.value as number)}
-            onSlideEnd={event => {
-              const target = event.value as number;
-              setScrub(null);
-              void viewRef.current?.goToFraction(target / 100).catch(() => undefined);
-            }}
-          />
-        </div>
+        <Slider
+          className="flex-1 mx-2"
+          value={displayedPercent}
+          min={0}
+          max={100}
+          disabled={loading}
+          onChange={event => setScrub(event.value as number)}
+          onSlideEnd={event => {
+            const target = event.value as number;
+            setScrub(null);
+            void viewRef.current?.goToFraction(target / 100).catch(() => undefined);
+          }}
+        />
         <ReaderIconButton
           icon="pi-chevron-right"
           title="Next page"
+          tooltipPosition="top"
           disabled={loading}
           onClick={() => viewRef.current?.next()}
         />
-        <span className="reader-footer-label">
-          <strong>{formatPercent(position.percentage)}</strong>
-        </span>
-      </footer>
-    </div>
+        <strong className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatPercent(position.percentage)}
+        </strong>
+      </ReaderFooter>
+    </ReaderRoot>
   );
 }

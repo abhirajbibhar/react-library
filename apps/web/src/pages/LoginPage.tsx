@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from 'primereact/button';
+import { Card } from 'primereact/card';
 import { InputText } from 'primereact/inputtext';
 import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
 import { useAuth } from '../auth/AuthContext';
+import FormField from '../components/FormField';
 import { useSetupStatus } from '../hooks/useApi';
 
 export default function LoginPage() {
@@ -44,33 +46,49 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="auth-page">
-      <form className="auth-card" onSubmit={submit}>
-        <div className="auth-title">
-          <i className="pi pi-book" /> BookLore
-        </div>
-        <p className="auth-subtitle">Sign in to your library.</p>
-        {sessionExpired && <Message severity="warn" text="Your session expired, please sign in again." className="auth-message" />}
-        {error && <Message severity="error" text={error} className="auth-message" />}
-        <label htmlFor="login-username">Username</label>
-        <InputText
-          id="login-username"
-          value={username}
-          onChange={event => setUsername(event.target.value)}
-          autoFocus
-          required
-        />
-        <label htmlFor="login-password">Password</label>
-        <Password
-          id="login-password"
-          value={password}
-          onChange={event => setPassword(event.target.value)}
-          feedback={false}
-          toggleMask
-          required
-        />
-        <Button label="Sign In" type="submit" loading={submitting} className="auth-submit" />
-      </form>
+    <div className="flex align-items-center justify-content-center min-h-screen p-3 surface-ground text-color">
+      <Card
+        className="w-full shadow-4"
+        style={{ maxWidth: '26rem' }}
+        title={
+          <span className="flex align-items-center gap-2">
+            <img src="/favicon.svg" alt="" width={32} height={32} />
+            BookLore
+          </span>
+        }
+        subTitle="Sign in to your library."
+      >
+        <form className="flex flex-column gap-3" onSubmit={submit}>
+          {sessionExpired && (
+            <Message severity="warn" text="Your session expired, please sign in again." className="w-full justify-content-start" />
+          )}
+          {error && <Message severity="error" text={error} className="w-full justify-content-start" />}
+          <FormField label="Username" htmlFor="login-username">
+            <InputText
+              id="login-username"
+              value={username}
+              onChange={event => setUsername(event.target.value)}
+              autoComplete="username"
+              autoFocus
+              required
+            />
+          </FormField>
+          <FormField label="Password" htmlFor="login-password">
+            <Password
+              inputId="login-password"
+              value={password}
+              onChange={event => setPassword(event.target.value)}
+              feedback={false}
+              toggleMask
+              required
+              autoComplete="current-password"
+              className="w-full"
+              inputClassName="w-full"
+            />
+          </FormField>
+          <Button label="Sign In" icon="pi pi-sign-in" type="submit" loading={submitting} className="mt-2" />
+        </form>
+      </Card>
     </div>
   );
 }

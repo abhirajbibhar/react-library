@@ -14,7 +14,7 @@ export default function RequireAuth() {
 
   if (loading || !user) {
     return (
-      <div className="full-page-center">
+      <div className="flex align-items-center justify-content-center h-screen">
         <ProgressSpinner />
       </div>
     );

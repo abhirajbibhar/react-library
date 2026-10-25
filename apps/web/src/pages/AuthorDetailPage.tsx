@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import BookCard from '../components/BookCard';
+import CardGrid from '../components/CardGrid';
+import PageHeader from '../components/PageHeader';
+import { EmptyState, LoadingState } from '../components/States';
 import { useBooks } from '../hooks/useApi';
 import { findAuthorById } from '../utils/entities';
 
@@ -21,33 +24,23 @@ export default function AuthorDetailPage() {
     [author]
   );
 
-  if (isLoading) return <p className="muted entity-page">Loading…</p>;
+  if (isLoading) return <LoadingState />;
   if (!author) {
     return (
-      <div className="empty-state entity-page">
-        <i className="pi pi-users" />
-        <p>Author not found.</p>
+      <EmptyState icon="pi-users" message="Author not found.">
         <Link to="/authors">Back to authors</Link>
-      </div>
+      </EmptyState>
     );
   }
 
   return (
-    <div className="entity-page">
-      <div className="browser-header">
-        <div className="browser-title">
-          <h2>{author.name}</h2>
-          <span className="browser-count">{author.books.length} books</span>
-        </div>
-      </div>
-      <div
-        className="book-grid"
-        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(var(--grid-min-width, 150px), 1fr))' }}
-      >
+    <div className="flex flex-column gap-3">
+      <PageHeader title={author.name} subtitle={`${author.books.length} books`} />
+      <CardGrid>
         {sortedBooks.map(book => (
           <BookCard key={book.id} book={book} selected={false} selectionEnabled={false} />
         ))}
-      </div>
+      </CardGrid>
     </div>
   );
 }

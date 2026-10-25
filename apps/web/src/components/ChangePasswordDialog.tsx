@@ -5,6 +5,7 @@ import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
 import { Toast } from 'primereact/toast';
 import { api } from '../api/client';
+import FormField from './FormField';
 
 export default function ChangePasswordDialog({ visible, onHide }: { visible: boolean; onHide: () => void }) {
   const toast = useRef<Toast>(null);
@@ -39,31 +40,47 @@ export default function ChangePasswordDialog({ visible, onHide }: { visible: boo
   };
 
   return (
-    <Dialog visible={visible} onHide={onHide} header="Change Password" style={{ width: '26rem' }}>
+    <Dialog visible={visible} onHide={onHide} header="Change Password" style={{ width: '26rem' }} breakpoints={{ '640px': '95vw' }}>
       <Toast ref={toast} />
-      <form className="auth-card auth-card-plain" onSubmit={submit}>
-        {error && <Message severity="error" text={error} className="auth-message" />}
-        <label htmlFor="pw-current">Current Password</label>
-        <Password
-          id="pw-current"
-          value={form.currentPassword}
-          onChange={update('currentPassword')}
-          feedback={false}
-          toggleMask
-          required
-        />
-        <label htmlFor="pw-new">New Password</label>
-        <Password id="pw-new" value={form.newPassword} onChange={update('newPassword')} toggleMask required minLength={8} />
-        <label htmlFor="pw-confirm">Confirm New Password</label>
-        <Password
-          id="pw-confirm"
-          value={form.confirmPassword}
-          onChange={update('confirmPassword')}
-          feedback={false}
-          toggleMask
-          required
-        />
-        <Button label="Change Password" type="submit" loading={submitting} className="auth-submit" />
+      <form className="flex flex-column gap-3" onSubmit={submit}>
+        {error && <Message severity="error" text={error} className="w-full justify-content-start" />}
+        <FormField label="Current Password" htmlFor="pw-current">
+          <Password
+            inputId="pw-current"
+            value={form.currentPassword}
+            onChange={update('currentPassword')}
+            feedback={false}
+            toggleMask
+            required
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        <FormField label="New Password" htmlFor="pw-new">
+          <Password
+            inputId="pw-new"
+            value={form.newPassword}
+            onChange={update('newPassword')}
+            toggleMask
+            required
+            minLength={8}
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        <FormField label="Confirm New Password" htmlFor="pw-confirm">
+          <Password
+            inputId="pw-confirm"
+            value={form.confirmPassword}
+            onChange={update('confirmPassword')}
+            feedback={false}
+            toggleMask
+            required
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        <Button label="Change Password" type="submit" loading={submitting} className="mt-2" />
       </form>
     </Dialog>
   );

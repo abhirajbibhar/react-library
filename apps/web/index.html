@@ -4,10 +4,30 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#20262e" />
+    <meta name="theme-color" content="#ffffff" />
     <title>BookLore</title>
+    <!-- Picks the Lara theme file before first paint so a dark-mode user never
+         sees a light flash. Keep the storage key / file names in sync with
+         src/theme/ThemeContext.tsx. -->
+    <script>
+      (function () {
+        var mode = 'light';
+        try {
+          var stored = localStorage.getItem('booklore.theme');
+          mode =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+        } catch (e) {}
+        document.write(
+          '<link id="theme-link" rel="stylesheet" href="/themes/lara-' + mode + '-amber.css">'
+        );
+      })();
+    </script>
   </head>
-  <body>
+  <body class="m-0 surface-ground text-color">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

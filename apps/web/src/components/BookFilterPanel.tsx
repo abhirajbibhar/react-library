@@ -1,55 +1,13 @@
 import { useState } from 'react';
+import { Accordion, AccordionTab } from 'primereact/accordion';
+import { Badge } from 'primereact/badge';
 import { Button } from 'primereact/button';
-import { Checkbox } from 'primereact/checkbox';
-import { InputText } from 'primereact/inputtext';
+import { Panel } from 'primereact/panel';
 import { Sidebar } from 'primereact/sidebar';
 import { buildFacets, FILTER_LABELS, isFilterActive, type FilterSelection, type FilterType } from '../utils/filters';
 import type { Book } from '../api/types';
-
-function FacetSection({
-  type,
-  values,
-  selected,
-  onToggle
-}: {
-  type: FilterType;
-  values: { id: string | number; name: string; bookCount: number }[];
-  selected: (string | number)[];
-  onToggle: (type: FilterType, id: string | number) => void;
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-  if (values.length === 0) return null;
-
-  return (
-    <div className="filter-section">
-      <div className="filter-section-header" onClick={() => setCollapsed(value => !value)}>
-        <span>{FILTER_LABELS[type]}</span>
-        <div className="filter-section-header-right">
-          {selected.length > 0 && <span className="filter-active-count">{selected.length}</span>}
-          <i className={`pi ${collapsed ? 'pi-angle-down' : 'pi-angle-up'}`} />
-        </div>
-      </div>
-      {!collapsed && (
-        <div className="filter-section-values">
-          {values.map(value => {
-            const checked = selected.includes(value.id);
-            return (
-              <label key={String(value.id)} className={`filter-value${checked ? ' checked' : ''}`}>
-                <Checkbox
-                  checked={checked}
-                  onChange={() => onToggle(type, value.id)}
-                  aria-label={value.name}
-                />
-                <span className="filter-value-name">{value.name}</span>
-                <span className="filter-value-count">{value.bookCount}</span>
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+import CheckRow from './CheckRow';
+import SearchField from './SearchField';
 
 export default function BookFilterPanel({
   visible,
@@ -69,6 +27,7 @@ export default function BookFilterPanel({
   isMobile: boolean;
 }) {
   const [scopeSearch, setScopeSearch] = useState('');
+  const [closed, setClosed] = useState<Set<FilterType>>(new Set());
   const facets = buildFacets(books, selection);
 
   const toggleValue = (type: FilterType, id: string | number) => {
@@ -77,45 +36,95 @@ export default function BookFilterPanel({
     onSelectionChange({ ...selection, [type]: next });
   };
 
-  const visibleFacets = facets.map(facet => ({
-    ...facet,
-    values: scopeSearch
-      ? facet.values.filter(value => value.name.toLowerCase().includes(scopeSearch.toLowerCase()))
-      : facet.values
-  }));
+  const needle = scopeSearch.trim().toLowerCase();
+  const visibleFacets = facets
+    .map(facet => ({
+      ...facet,
+      values: needle ? facet.values.filter(value => value.name.toLowerCase().includes(needle)) : facet.values
+    }))
+    .filter(facet => facet.values.length > 0);
+
+  const openIndexes = visibleFacets.flatMap((facet, index) => (closed.has(facet.type) ? [] : [index]));
 
   const body = (
-    <div className="filter-panel">
-      <div className="filter-panel-header">
-        <InputText
+    <div className="flex flex-column gap-3">
+      <div className="flex align-items-center gap-2">
+        <SearchField
           value={scopeSearch}
-          onChange={event => setScopeSearch(event.target.value)}
+          onChange={setScopeSearch}
           placeholder="Find a filter value"
-          className="filter-search"
+          className="flex-1"
         />
         {isFilterActive(selection) && (
-          <Button icon="pi pi-filter-slash" text severity="secondary" onClick={onClear} tooltip="Clear all filters" />
+          <Button
+            icon="pi pi-filter-slash"
+            text
+            rounded
+            severity="secondary"
+            onClick={onClear}
+            aria-label="Clear all filters"
+            tooltip="Clear all filters"
+          />
         )}
       </div>
-      {visibleFacets.map(facet => (
-        <FacetSection
-          key={facet.type}
-          type={facet.type}
-          values={facet.values}
-          selected={selection[facet.type] ?? []}
-          onToggle={toggleValue}
-        />
-      ))}
+      {visibleFacets.length === 0 ? (
+        <span className="text-color-secondary text-sm">No filter values available.</span>
+      ) : (
+        <Accordion
+          multiple
+          activeIndex={openIndexes}
+          onTabChange={event => {
+            const open = new Set(event.index as number[]);
+            setClosed(new Set(visibleFacets.filter((_, index) => !open.has(index)).map(facet => facet.type)));
+          }}
+        >
+          {visibleFacets.map(facet => {
+            const selected = selection[facet.type] ?? [];
+            return (
+              <AccordionTab
+                key={facet.type}
+                header={
+                  <span className="flex align-items-center justify-content-between gap-2 w-full">
+                    <span>{FILTER_LABELS[facet.type]}</span>
+                    {selected.length > 0 && <Badge value={selected.length} />}
+                  </span>
+                }
+              >
+                <div className="flex flex-column gap-2 overflow-y-auto" style={{ maxHeight: '16rem' }}>
+                  {facet.values.map(value => (
+                    <CheckRow
+                      key={String(value.id)}
+                      id={`filter-${facet.type}-${String(value.id)}`}
+                      label={value.name}
+                      count={value.bookCount}
+                      checked={selected.includes(value.id)}
+                      onChange={() => toggleValue(facet.type, value.id)}
+                    />
+                  ))}
+                </div>
+              </AccordionTab>
+            );
+          })}
+        </Accordion>
+      )}
     </div>
   );
 
   if (isMobile) {
     return (
-      <Sidebar visible={visible} onHide={onHide} position="right" className="filter-sidebar">
+      <Sidebar visible={visible} onHide={onHide} position="right" header="Filters" className="w-20rem">
         {body}
       </Sidebar>
     );
   }
 
-  return visible ? <aside className="filter-sidebar-desktop">{body}</aside> : null;
+  if (!visible) return null;
+  return (
+    <div
+      className="sticky top-0 flex-shrink-0 overflow-y-auto"
+      style={{ width: '19rem', maxHeight: 'calc(100vh - 11rem)' }}
+    >
+      <Panel header="Filters">{body}</Panel>
+    </div>
+  );
 }

@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from 'primereact/button';
 import { Checkbox } from 'primereact/checkbox';
@@ -6,6 +6,7 @@ import { Column } from 'primereact/column';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { DataTable } from 'primereact/datatable';
 import { Dialog } from 'primereact/dialog';
+import { Divider } from 'primereact/divider';
 import { InputText } from 'primereact/inputtext';
 import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
@@ -14,6 +15,8 @@ import { Toast } from 'primereact/toast';
 import { api } from '../api/client';
 import type { Library, Permissions, Shelf, User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import FormField from '../components/FormField';
+import PageHeader from '../components/PageHeader';
 import { queryKeys, useLibraries, useShelves, useUsers } from '../hooks/useApi';
 
 function useToast() {
@@ -21,6 +24,17 @@ function useToast() {
   const node = <Toast ref={toast} />;
   return { toast, node };
 }
+
+function TabHeader({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <div className="flex justify-content-between align-items-center mb-3">
+      <h3 className="m-0 text-xl font-semibold">{title}</h3>
+      {action}
+    </div>
+  );
+}
+
+const FORM_MESSAGE_CLASS = 'w-full justify-content-start';
 
 /* ------------------------------ libraries ------------------------------- */
 
@@ -92,13 +106,13 @@ function LibrariesTab() {
   };
 
   return (
-    <div className="settings-tab">
+    <div>
       {node}
       <ConfirmDialog />
-      <div className="settings-tab-header">
-        <h3>Libraries</h3>
-        {canManage && <Button label="New Library" icon="pi pi-plus" size="small" onClick={openCreate} />}
-      </div>
+      <TabHeader
+        title="Libraries"
+        action={canManage && <Button label="New Library" icon="pi pi-plus" size="small" onClick={openCreate} />}
+      />
       <DataTable value={libraries ?? []} size="small" stripedRows emptyMessage="No libraries yet">
         <Column field="name" header="Name" />
         <Column field="bookCount" header="Books" style={{ width: '6rem' }} />
@@ -107,7 +121,7 @@ function LibrariesTab() {
             header=""
             style={{ width: '9rem' }}
             body={library => (
-              <div className="row-actions">
+              <div className="flex gap-1">
                 <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(library)} tooltip="Edit" />
                 <Button
                   icon="pi pi-trash"
@@ -128,11 +142,13 @@ function LibrariesTab() {
         onHide={() => setDialogOpen(false)}
         header={editing ? 'Edit Library' : 'New Library'}
         style={{ width: '22rem' }}
+        breakpoints={{ '640px': '95vw' }}
       >
-        <form onSubmit={save} className="settings-form">
-          {error && <Message severity="error" text={error} className="auth-message" />}
-          <label htmlFor="library-name">Name</label>
-          <InputText id="library-name" value={name} onChange={event => setName(event.target.value)} required autoFocus />
+        <form onSubmit={save} className="flex flex-column gap-3">
+          {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
+          <FormField label="Name" htmlFor="library-name">
+            <InputText id="library-name" value={name} onChange={event => setName(event.target.value)} required autoFocus />
+          </FormField>
           <Button label="Save" type="submit" className="mt-2" />
         </form>
       </Dialog>
@@ -213,13 +229,10 @@ function ShelvesTab() {
   };
 
   return (
-    <div className="settings-tab">
+    <div>
       {node}
       <ConfirmDialog />
-      <div className="settings-tab-header">
-        <h3>Shelves</h3>
-        <Button label="New Shelf" icon="pi pi-plus" size="small" onClick={openCreate} />
-      </div>
+      <TabHeader title="Shelves" action={<Button label="New Shelf" icon="pi pi-plus" size="small" onClick={openCreate} />} />
       <DataTable value={shelves ?? []} size="small" stripedRows emptyMessage="No shelves yet">
         <Column field="name" header="Name" />
         <Column field="bookCount" header="Books" style={{ width: '6rem' }} />
@@ -232,7 +245,7 @@ function ShelvesTab() {
           header=""
           style={{ width: '9rem' }}
           body={shelf => (
-            <div className="row-actions">
+            <div className="flex gap-1">
               <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(shelf)} tooltip="Edit" />
               <Button
                 icon="pi pi-trash"
@@ -253,15 +266,19 @@ function ShelvesTab() {
         onHide={() => setDialogOpen(false)}
         header={editing ? 'Edit Shelf' : 'New Shelf'}
         style={{ width: '22rem' }}
+        breakpoints={{ '640px': '95vw' }}
       >
-        <form onSubmit={save} className="settings-form">
-          {error && <Message severity="error" text={error} className="auth-message" />}
-          <label htmlFor="shelf-name">Name</label>
-          <InputText id="shelf-name" value={name} onChange={event => setName(event.target.value)} required autoFocus />
-          <label className="settings-checkbox">
+        <form onSubmit={save} className="flex flex-column gap-3">
+          {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
+          <FormField label="Name" htmlFor="shelf-name">
+            <InputText id="shelf-name" value={name} onChange={event => setName(event.target.value)} required autoFocus />
+          </FormField>
+          <div className="flex align-items-center gap-2">
             <Checkbox checked={isPublic} onChange={event => setIsPublic(Boolean(event.checked))} inputId="shelf-public" />
-            <span>Visible to all users</span>
-          </label>
+            <label htmlFor="shelf-public" className="cursor-pointer">
+              Visible to all users
+            </label>
+          </div>
           <Button label="Save" type="submit" className="mt-2" />
         </form>
       </Dialog>
@@ -384,13 +401,10 @@ function UsersTab() {
   };
 
   return (
-    <div className="settings-tab">
+    <div>
       {node}
       <ConfirmDialog />
-      <div className="settings-tab-header">
-        <h3>Users</h3>
-        <Button label="New User" icon="pi pi-plus" size="small" onClick={openCreate} />
-      </div>
+      <TabHeader title="Users" action={<Button label="New User" icon="pi pi-plus" size="small" onClick={openCreate} />} />
       <DataTable value={users ?? []} size="small" stripedRows emptyMessage="No users">
         <Column field="username" header="Username" />
         <Column field="name" header="Name" />
@@ -407,7 +421,7 @@ function UsersTab() {
           header=""
           style={{ width: '11rem' }}
           body={target => (
-            <div className="row-actions">
+            <div className="flex gap-1">
               <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(target)} tooltip="Edit" />
               <Button
                 icon="pi pi-key"
@@ -438,52 +452,57 @@ function UsersTab() {
         onHide={() => setDialogOpen(false)}
         header={editing ? `Edit ${editing.username}` : 'New User'}
         style={{ width: '26rem' }}
+        breakpoints={{ '640px': '95vw' }}
       >
-        <form onSubmit={save} className="settings-form">
-          {error && <Message severity="error" text={error} className="auth-message" />}
+        <form onSubmit={save} className="flex flex-column gap-3">
+          {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
           {!editing && (
-            <>
-              <label htmlFor="user-username">Username</label>
+            <FormField label="Username" htmlFor="user-username">
               <InputText
                 id="user-username"
                 value={form.username}
                 onChange={event => setForm(current => ({ ...current, username: event.target.value }))}
                 required
               />
-            </>
+            </FormField>
           )}
-          <label htmlFor="user-name">Name</label>
-          <InputText
-            id="user-name"
-            value={form.name}
-            onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
-            required
-          />
-          <label htmlFor="user-email">Email</label>
-          <InputText
-            id="user-email"
-            type="email"
-            value={form.email}
-            onChange={event => setForm(current => ({ ...current, email: event.target.value }))}
-            required
-          />
+          <FormField label="Name" htmlFor="user-name">
+            <InputText
+              id="user-name"
+              value={form.name}
+              onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
+              required
+            />
+          </FormField>
+          <FormField label="Email" htmlFor="user-email">
+            <InputText
+              id="user-email"
+              type="email"
+              value={form.email}
+              onChange={event => setForm(current => ({ ...current, email: event.target.value }))}
+              required
+            />
+          </FormField>
           {!editing && (
-            <>
-              <label htmlFor="user-password">Password</label>
+            <FormField label="Password" htmlFor="user-password">
               <Password
-                id="user-password"
+                inputId="user-password"
                 value={form.password}
                 onChange={event => setForm(current => ({ ...current, password: event.target.value }))}
                 feedback={false}
                 toggleMask
                 required
                 minLength={8}
+                className="w-full"
+                inputClassName="w-full"
               />
-            </>
+            </FormField>
           )}
-          <div className="permission-grid">
+          <Divider className="my-1" />
+          <span className="font-medium text-sm">Permissions</span>
+          <div className="grid">
             {PERMISSION_LABELS.map(permission => (
-              <label key={permission.key} className="settings-checkbox">
+              <div key={permission.key} className="col-12 sm:col-6 flex align-items-center gap-2 py-1">
                 <Checkbox
                   checked={permissions[permission.key]}
                   onChange={event =>
@@ -491,8 +510,10 @@ function UsersTab() {
                   }
                   inputId={`perm-${permission.key}`}
                 />
-                <span>{permission.label}</span>
-              </label>
+                <label htmlFor={`perm-${permission.key}`} className="cursor-pointer text-sm">
+                  {permission.label}
+                </label>
+              </div>
             ))}
           </div>
           <Button label="Save" type="submit" className="mt-2" />
@@ -504,19 +525,23 @@ function UsersTab() {
         onHide={() => setPasswordReset(null)}
         header={passwordReset ? `Reset password for ${passwordReset.username}` : ''}
         style={{ width: '22rem' }}
+        breakpoints={{ '640px': '95vw' }}
       >
-        <form onSubmit={resetPassword} className="settings-form">
-          <label htmlFor="reset-password">New Password</label>
-          <Password
-            id="reset-password"
-            value={newPassword}
-            onChange={event => setNewPassword(event.target.value)}
-            feedback={false}
-            toggleMask
-            required
-            minLength={8}
-            autoFocus
-          />
+        <form onSubmit={resetPassword} className="flex flex-column gap-3">
+          <FormField label="New Password" htmlFor="reset-password">
+            <Password
+              inputId="reset-password"
+              value={newPassword}
+              onChange={event => setNewPassword(event.target.value)}
+              feedback={false}
+              toggleMask
+              required
+              minLength={8}
+              autoFocus
+              className="w-full"
+              inputClassName="w-full"
+            />
+          </FormField>
           <Button label="Reset Password" type="submit" className="mt-2" />
         </form>
       </Dialog>
@@ -568,53 +593,52 @@ function AccountTab() {
   };
 
   return (
-    <div className="settings-tab">
+    <div>
       <Toast ref={toast} />
-      <div className="settings-tab-header">
-        <h3>Account</h3>
-      </div>
-      <form onSubmit={submitPassword} className="settings-form">
-        <label htmlFor="settings-current-password">Current Password</label>
-        <Password
-          id="settings-current-password"
-          value={form.currentPassword}
-          onChange={update('currentPassword')}
-          feedback={false}
-          toggleMask
-          required
-        />
-        <label htmlFor="settings-new-password">New Password</label>
-        <Password
-          id="settings-new-password"
-          value={form.newPassword}
-          onChange={update('newPassword')}
-          feedback={false}
-          toggleMask
-          required
-          minLength={8}
-        />
-        <label htmlFor="settings-confirm-password">Confirm New Password</label>
-        <Password
-          id="settings-confirm-password"
-          value={form.confirmPassword}
-          onChange={update('confirmPassword')}
-          feedback={false}
-          toggleMask
-          required
-        />
-        {error && <Message severity="error" text={error} className="auth-message" />}
+      <TabHeader title="Account" />
+      <form onSubmit={submitPassword} className="flex flex-column gap-3" style={{ maxWidth: '26rem' }}>
+        <FormField label="Current Password" htmlFor="settings-current-password">
+          <Password
+            inputId="settings-current-password"
+            value={form.currentPassword}
+            onChange={update('currentPassword')}
+            feedback={false}
+            toggleMask
+            required
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        <FormField label="New Password" htmlFor="settings-new-password">
+          <Password
+            inputId="settings-new-password"
+            value={form.newPassword}
+            onChange={update('newPassword')}
+            feedback={false}
+            toggleMask
+            required
+            minLength={8}
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        <FormField label="Confirm New Password" htmlFor="settings-confirm-password">
+          <Password
+            inputId="settings-confirm-password"
+            value={form.confirmPassword}
+            onChange={update('confirmPassword')}
+            feedback={false}
+            toggleMask
+            required
+            className="w-full"
+            inputClassName="w-full"
+          />
+        </FormField>
+        {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
         <Button label="Change Password" type="submit" loading={submitting} className="mt-2" />
       </form>
-      <div className="settings-form">
-        <Button
-          label="Logout everywhere"
-          icon="pi pi-power-off"
-          severity="danger"
-          outlined
-          onClick={clearSession}
-          className="mt-2"
-        />
-      </div>
+      <Divider />
+      <Button label="Logout everywhere" icon="pi pi-power-off" severity="danger" outlined onClick={clearSession} />
     </div>
   );
 }
@@ -623,25 +647,21 @@ export default function SettingsPage() {
   const { user } = useAuth();
 
   return (
-    <div className="settings-page entity-page">
-      <div className="browser-header">
-        <div className="browser-title">
-          <h2>Settings</h2>
-        </div>
-      </div>
+    <div className="flex flex-column gap-3" style={{ maxWidth: '68rem' }}>
+      <PageHeader title="Settings" />
       <TabView>
-        <TabPanel header="Libraries">
+        <TabPanel header="Libraries" leftIcon="pi pi-folder mr-2">
           <LibrariesTab />
         </TabPanel>
-        <TabPanel header="Shelves">
+        <TabPanel header="Shelves" leftIcon="pi pi-bookmark mr-2">
           <ShelvesTab />
         </TabPanel>
         {user?.permissions.admin && (
-          <TabPanel header="Users">
+          <TabPanel header="Users" leftIcon="pi pi-users mr-2">
             <UsersTab />
           </TabPanel>
         )}
-        <TabPanel header="Account">
+        <TabPanel header="Account" leftIcon="pi pi-user mr-2">
           <AccountTab />
         </TabPanel>
       </TabView>

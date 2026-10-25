@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from 'primereact/button';
-import { Checkbox } from 'primereact/checkbox';
 import { Dialog } from 'primereact/dialog';
 import { Toast } from 'primereact/toast';
-import { useRef } from 'react';
 import { useShelves, useUpdateBookShelves } from '../hooks/useApi';
 import type { Book } from '../api/types';
+import CheckRow from './CheckRow';
 
 export default function ShelfAssignerDialog({
   visible,
@@ -74,30 +73,39 @@ export default function ShelfAssignerDialog({
     }
   };
 
+  const footer = (
+    <div className="flex justify-content-end gap-2">
+      <Button label="Cancel" text severity="secondary" onClick={onHide} />
+      <Button label="Apply" onClick={() => void apply()} loading={updateShelves.isPending} />
+    </div>
+  );
+
   return (
-    <Dialog visible={visible} onHide={onHide} header="Assign to Shelf" style={{ width: '24rem' }}>
+    <Dialog
+      visible={visible}
+      onHide={onHide}
+      header="Assign to Shelf"
+      footer={footer}
+      style={{ width: '24rem' }}
+      breakpoints={{ '640px': '95vw' }}
+    >
       <Toast ref={toast} />
       {shelves && shelves.length > 0 ? (
-        <div className="shelf-assigner-list">
+        <div className="flex flex-column gap-3 overflow-y-auto" style={{ maxHeight: '20rem' }}>
           {shelves.map(shelf => (
-            <label key={shelf.id} className="filter-value">
-              <Checkbox
-                checked={selected.has(shelf.id)}
-                onChange={event => toggle(shelf.id, Boolean(event.checked))}
-                aria-label={shelf.name}
-              />
-              <span className="filter-value-name">{shelf.name}</span>
-              <span className="filter-value-count">{shelf.bookCount ?? 0}</span>
-            </label>
+            <CheckRow
+              key={shelf.id}
+              id={`shelf-assign-${shelf.id}`}
+              label={shelf.name}
+              count={shelf.bookCount ?? 0}
+              checked={selected.has(shelf.id)}
+              onChange={checked => toggle(shelf.id, checked)}
+            />
           ))}
         </div>
       ) : (
-        <p>No shelves yet. Create one from Settings → Shelves.</p>
+        <p className="m-0 text-color-secondary">No shelves yet. Create one from Settings → Shelves.</p>
       )}
-      <div className="dialog-footer">
-        <Button label="Cancel" text onClick={onHide} />
-        <Button label="Apply" onClick={() => void apply()} loading={updateShelves.isPending} />
-      </div>
     </Dialog>
   );
 }

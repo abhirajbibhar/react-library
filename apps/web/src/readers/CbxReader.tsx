@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SelectButton } from 'primereact/selectbutton';
+import { Sidebar } from 'primereact/sidebar';
 import { Slider } from 'primereact/slider';
 import type { Book } from '../api/types';
 import { api, tokenStore } from '../api/client';
 import { useProgressSaver } from './progress';
-import { ReaderHeader, ReaderIconButton } from './ReaderChrome';
-import { useReaderSettings, type CbxBackground } from './settings';
+import {
+  isFromDrawer,
+  ReaderBody,
+  ReaderFooter,
+  ReaderHeader,
+  ReaderIconButton,
+  ReaderLoading,
+  ReaderMessage,
+  ReaderRoot,
+  ReaderSetting
+} from './ReaderChrome';
+import { useReaderSettings, type CbxBackground, type CbxFitMode, type CbxViewMode } from './settings';
 import {
   alignSpreadStart,
   clampPage,
@@ -21,6 +33,56 @@ const BACKGROUNDS: Record<CbxBackground, string> = {
   gray: '#3f3f46',
   white: '#ffffff'
 };
+
+const VIEW_OPTIONS: { label: string; value: CbxViewMode }[] = [
+  { label: 'Single', value: 'single' },
+  { label: 'Spread', value: 'spread' }
+];
+const FIT_OPTIONS: { label: string; value: CbxFitMode }[] = [
+  { label: 'Page', value: 'page' },
+  { label: 'Width', value: 'width' }
+];
+const BACKGROUND_OPTIONS: { label: string; value: CbxBackground }[] = [
+  { label: 'Black', value: 'black' },
+  { label: 'Gray', value: 'gray' },
+  { label: 'White', value: 'white' }
+];
+const DIRECTION_OPTIONS = [
+  { label: 'Left to right', value: false },
+  { label: 'Right to left', value: true }
+];
+
+/** Scroll surface holding the page image(s). */
+function surfaceStyle(spread: boolean, fitWidth: boolean, background: string): CSSProperties {
+  return {
+    position: 'absolute',
+    inset: 0,
+    overflow: 'auto',
+    padding: 8,
+    display: 'flex',
+    alignItems: fitWidth ? 'flex-start' : 'center',
+    justifyContent: 'center',
+    gap: spread ? 8 : undefined,
+    background
+  };
+}
+
+/** One page image; sizing depends on single/spread and fit mode. */
+function pageStyle(spread: boolean, fitWidth: boolean): CSSProperties {
+  const base: CSSProperties = { display: 'block', maxWidth: '100%', objectFit: 'contain' };
+  if (spread) {
+    return {
+      ...base,
+      flex: '1 1 0',
+      minWidth: 0,
+      maxHeight: fitWidth ? 'none' : '100%',
+      height: fitWidth ? 'auto' : undefined
+    };
+  }
+  return fitWidth
+    ? { ...base, maxHeight: 'none', width: '100%', height: 'auto' }
+    : { ...base, maxHeight: '100%' };
+}
 
 export default function CbxReader({ book }: { book: Book }) {
   const navigate = useNavigate();
@@ -109,7 +171,7 @@ export default function CbxReader({ book }: { book: Book }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLInputElement || isFromDrawer(event)) return;
       if (total <= 0) return;
       switch (event.key) {
         case 'ArrowRight':
@@ -165,8 +227,10 @@ export default function CbxReader({ book }: { book: Book }) {
     else goPrev();
   };
 
+  const fitWidth = settings.fit === 'width';
+
   return (
-    <div className="reader-root">
+    <ReaderRoot>
       <ReaderHeader
         title={book.metadata.title ?? book.fileName}
         subtitle={settings.rtl ? 'Right-to-left' : undefined}
@@ -181,154 +245,112 @@ export default function CbxReader({ book }: { book: Book }) {
         }
       />
 
-      <div className="reader-body" onClick={() => setSettingsOpen(false)}>
+      <ReaderBody>
         <div
-          className={`cbx-surface ${spread ? 'cbx-spread' : 'cbx-single'} ${
-            settings.fit === 'width' ? 'cbx-fit-width' : 'cbx-fit-page'
-          }`}
-          style={{ background: BACKGROUNDS[settings.background] }}
+          style={surfaceStyle(spread, fitWidth, BACKGROUNDS[settings.background])}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          {pages && shown.map(page => (
-            <img
-              key={page}
-              className="cbx-page"
-              src={imageUrl(page)}
-              alt={`Page ${page}`}
-              draggable={false}
-            />
-          ))}
+          {pages &&
+            shown.map(page => (
+              <img
+                key={page}
+                src={imageUrl(page)}
+                alt={`Page ${page}`}
+                draggable={false}
+                style={pageStyle(spread, fitWidth)}
+              />
+            ))}
         </div>
 
-        {settingsOpen ? (
-          <div className="reader-settings" onClick={event => event.stopPropagation()}>
-            <div className="reader-settings-row">
-              <label>Pages</label>
-              <div className="reader-seg">
-                <button
-                  type="button"
-                  className={`seg-option${!spread ? ' active' : ''}`}
-                  onClick={() => updateSettings({ viewMode: 'single' })}
-                >
-                  Single
-                </button>
-                <button
-                  type="button"
-                  className={`seg-option${spread ? ' active' : ''}`}
-                  onClick={() => updateSettings({ viewMode: 'spread' })}
-                >
-                  Spread
-                </button>
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Fit</label>
-              <div className="reader-seg">
-                <button
-                  type="button"
-                  className={`seg-option${settings.fit === 'page' ? ' active' : ''}`}
-                  onClick={() => updateSettings({ fit: 'page' })}
-                >
-                  Page
-                </button>
-                <button
-                  type="button"
-                  className={`seg-option${settings.fit === 'width' ? ' active' : ''}`}
-                  onClick={() => updateSettings({ fit: 'width' })}
-                >
-                  Width
-                </button>
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Background</label>
-              <div className="reader-seg">
-                {(['black', 'gray', 'white'] as CbxBackground[]).map(background => (
-                  <button
-                    key={background}
-                    type="button"
-                    className={`seg-option${settings.background === background ? ' active' : ''}`}
-                    onClick={() => updateSettings({ background })}
-                  >
-                    {background}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="reader-settings-row">
-              <label>Direction</label>
-              <div className="reader-seg">
-                <button
-                  type="button"
-                  className={`seg-option${!settings.rtl ? ' active' : ''}`}
-                  onClick={() => updateSettings({ rtl: false })}
-                >
-                  Left to right
-                </button>
-                <button
-                  type="button"
-                  className={`seg-option${settings.rtl ? ' active' : ''}`}
-                  onClick={() => updateSettings({ rtl: true })}
-                >
-                  Right to left
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {!pages && !error ? (
-          <div className="reader-loading">
-            <i className="pi pi-spinner pi-spin" />
-            <span>Loading pages…</span>
-          </div>
-        ) : null}
-
+        {!pages && !error ? <ReaderLoading label="Loading pages…" /> : null}
         {error ? (
-          <div className="reader-message">
-            <h2>Could not open this comic</h2>
-            <p>{error}</p>
-          </div>
+          <ReaderMessage title="Could not open this comic">
+            <p className="m-0">{error}</p>
+          </ReaderMessage>
         ) : null}
-      </div>
+      </ReaderBody>
 
-      <footer className="reader-footer">
+      <Sidebar
+        visible={settingsOpen}
+        onHide={() => setSettingsOpen(false)}
+        position="right"
+        header="Reader settings"
+        className="w-full md:w-20rem"
+      >
+        <div className="flex flex-column gap-4">
+          <ReaderSetting label="Pages">
+            <SelectButton
+              value={settings.viewMode}
+              options={VIEW_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ viewMode: event.value as CbxViewMode })}
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Fit">
+            <SelectButton
+              value={settings.fit}
+              options={FIT_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ fit: event.value as CbxFitMode })}
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Background">
+            <SelectButton
+              value={settings.background}
+              options={BACKGROUND_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ background: event.value as CbxBackground })}
+            />
+          </ReaderSetting>
+          <ReaderSetting label="Direction">
+            <SelectButton
+              value={settings.rtl}
+              options={DIRECTION_OPTIONS}
+              allowEmpty={false}
+              onChange={event => updateSettings({ rtl: Boolean(event.value) })}
+            />
+          </ReaderSetting>
+        </div>
+      </Sidebar>
+
+      <ReaderFooter>
         <ReaderIconButton
           icon={settings.rtl ? 'pi-chevron-right' : 'pi-chevron-left'}
           title="Previous page"
+          tooltipPosition="top"
           disabled={!pages || current <= 1}
           onClick={goPrev}
         />
-        <div className="reader-slider">
-          <Slider
-            value={current}
-            min={1}
-            max={Math.max(1, total)}
-            disabled={!pages}
-            onChange={event => setCurrent(event.value as number)}
-            onSlideEnd={event => goTo(event.value as number)}
-          />
-        </div>
+        <Slider
+          className="flex-1 mx-2"
+          value={current}
+          min={1}
+          max={Math.max(1, total)}
+          disabled={!pages}
+          onChange={event => setCurrent(event.value as number)}
+          onSlideEnd={event => goTo(event.value as number)}
+        />
         <ReaderIconButton
           icon={settings.rtl ? 'pi-chevron-left' : 'pi-chevron-right'}
           title="Next page"
+          tooltipPosition="top"
           disabled={!pages || current >= total}
           onClick={goNext}
         />
-        <span className="reader-footer-label">
+        <span className="text-sm text-color-secondary white-space-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {total > 0 ? (
             <>
-              Page <strong>{current}</strong> / {total}
+              Page <strong className="text-color">{current}</strong> / {total}
             </>
           ) : (
             '—'
           )}
         </span>
-        <span className="reader-footer-label">
-          <strong>{total > 0 ? formatPercent(pagePercentage(current, total)) : '0%'}</strong>
-        </span>
-      </footer>
-    </div>
+        <strong className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {total > 0 ? formatPercent(pagePercentage(current, total)) : '0%'}
+        </strong>
+      </ReaderFooter>
+    </ReaderRoot>
   );
 }

@@ -142,34 +142,49 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
   const statusIcon = (status: UploadStatus) => {
     switch (status) {
       case 'done':
-        return <i className="pi pi-check-circle upload-status done" />;
+        return <i className="pi pi-check-circle text-green-500 text-xl" />;
       case 'error':
-        return <i className="pi pi-times-circle upload-status error" />;
+        return <i className="pi pi-times-circle text-red-500 text-xl" />;
       case 'uploading':
       case 'extracting':
-        return <i className="pi pi-spin pi-spinner upload-status" />;
+        return <i className="pi pi-spin pi-spinner text-primary text-xl" />;
       default:
-        return <i className="pi pi-circle upload-status" />;
+        return <i className="pi pi-circle text-color-secondary text-xl" />;
     }
   };
+
+  const footer =
+    items.length > 0 ? (
+      <div className="flex justify-content-end gap-2">
+        <Button label="Close" text severity="secondary" onClick={close} disabled={uploading} />
+        <Button
+          label="Upload"
+          icon="pi pi-upload"
+          onClick={() => void runUploads()}
+          loading={uploading}
+          disabled={!selectedLibrary || items.every(i => i.status === 'done')}
+        />
+      </div>
+    ) : undefined;
 
   return (
     <Dialog
       visible={visible}
       onHide={close}
       header="Upload Books"
+      footer={footer}
       maximizable
-      className="upload-dialog"
       style={{ width: '34rem' }}
+      breakpoints={{ '640px': '95vw' }}
     >
       <Toast ref={toast} />
-      <div className="upload-controls">
+      <div className="flex gap-2 mb-3">
         <Dropdown
           value={selectedLibrary}
           options={libraryOptions}
           onChange={event => setLibraryId(event.value as number)}
           placeholder="Select a library"
-          className="upload-library-select"
+          className="flex-1 min-w-0"
         />
         <Button
           icon="pi pi-plus"
@@ -182,7 +197,7 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
           type="file"
           multiple
           accept=".pdf,.epub,.cbz,.cbr,.zip,.fb2,.mobi,.azw3"
-          style={{ display: 'none' }}
+          hidden
           onChange={event => {
             pickFiles(event.target.files);
             event.target.value = '';
@@ -190,46 +205,48 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
         />
       </div>
 
-      {items.length > 0 && (
-        <>
-          <div className="upload-list">
-            {items.map(item => (
-              <div key={item.id} className="upload-item">
-                {statusIcon(item.status)}
-                <div className="upload-item-info">
-                  <div className="upload-item-name">{item.file.name}</div>
-                  <div className="upload-item-meta">
-                    {formatFileSize(Math.max(1, Math.round(item.file.size / 1024)))}
-                    {item.status === 'extracting' && ' · reading metadata…'}
-                    {item.message && <span className="upload-item-error"> · {item.message}</span>}
-                  </div>
-                  {(item.status === 'uploading' || item.status === 'extracting') && (
-                    <ProgressBar value={item.status === 'extracting' ? 5 : item.progress} showValue={false} />
-                  )}
+      {items.length === 0 ? (
+        <div className="flex flex-column align-items-center gap-2 py-5 text-color-secondary border-1 border-dashed surface-border border-round">
+          <i className="pi pi-cloud-upload text-4xl" />
+          <span>Choose a library, then add PDF, EPUB or comic files.</span>
+        </div>
+      ) : (
+        <div className="flex flex-column overflow-y-auto" style={{ maxHeight: '20rem' }}>
+          {items.map(item => (
+            <div key={item.id} className="flex align-items-center gap-3 py-2 border-bottom-1 surface-border">
+              {statusIcon(item.status)}
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis">
+                  {item.file.name}
                 </div>
-                {!uploading && (item.status === 'queued' || item.status === 'error' || item.status === 'done') && (
-                  <Button
-                    icon="pi pi-times"
-                    text
-                    rounded
-                    size="small"
-                    severity="secondary"
-                    onClick={() => setItems(current => current.filter(i => i.id !== item.id))}
+                <div className="text-color-secondary text-xs">
+                  {formatFileSize(Math.max(1, Math.round(item.file.size / 1024)))}
+                  {item.status === 'extracting' && ' · reading metadata…'}
+                  {item.message && <span className="text-red-500"> · {item.message}</span>}
+                </div>
+                {(item.status === 'uploading' || item.status === 'extracting') && (
+                  <ProgressBar
+                    value={item.status === 'extracting' ? 5 : item.progress}
+                    showValue={false}
+                    className="mt-2"
+                    style={{ height: '0.4rem' }}
                   />
                 )}
               </div>
-            ))}
-          </div>
-          <div className="upload-footer">
-            <Button
-              label="Upload"
-              icon="pi pi-upload"
-              onClick={() => void runUploads()}
-              loading={uploading}
-              disabled={!selectedLibrary || items.every(i => i.status === 'done')}
-            />
-          </div>
-        </>
+              {!uploading && (item.status === 'queued' || item.status === 'error' || item.status === 'done') && (
+                <Button
+                  icon="pi pi-times"
+                  text
+                  rounded
+                  size="small"
+                  severity="secondary"
+                  aria-label={`Remove ${item.file.name}`}
+                  onClick={() => setItems(current => current.filter(i => i.id !== item.id))}
+                />
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </Dialog>
   );

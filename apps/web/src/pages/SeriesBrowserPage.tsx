@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { InputText } from 'primereact/inputtext';
 import { coverUrl } from '../api/types';
+import CardGrid from '../components/CardGrid';
+import { CoverPlaceholder } from '../components/BookCard';
+import EntityCard from '../components/EntityCard';
+import PageHeader from '../components/PageHeader';
+import SearchField from '../components/SearchField';
+import { EmptyState, LoadingState } from '../components/States';
 import { useBooks } from '../hooks/useApi';
 import { deriveSeries } from '../utils/entities';
 
 export default function SeriesBrowserPage() {
-  const navigate = useNavigate();
   const { data: books, isLoading } = useBooks();
   const [search, setSearch] = useState('');
 
@@ -17,50 +20,41 @@ export default function SeriesBrowserPage() {
   }, [series, search]);
 
   return (
-    <div className="entity-browser">
-      <div className="browser-header">
-        <div className="browser-title">
-          <h2>Series</h2>
-          <span className="browser-count">{visible.length} series</span>
-        </div>
-        <div className="browser-toolbar">
-          <div className="browser-search">
-            <i className="pi pi-search" />
-            <InputText value={search} onChange={event => setSearch(event.target.value)} placeholder="Search series" />
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-column gap-3">
+      <PageHeader title="Series" subtitle={`${visible.length} series`}>
+        <SearchField value={search} onChange={setSearch} placeholder="Search series" />
+      </PageHeader>
 
-      {isLoading && <p className="muted">Loading…</p>}
+      {isLoading && <LoadingState />}
       {!isLoading && visible.length === 0 && (
-        <div className="empty-state">
-          <i className="pi pi-objects-column" />
-          <p>{search ? 'No series match your search.' : 'No series yet. Set a series name on a book’s metadata.'}</p>
-        </div>
+        <EmptyState
+          icon="pi-objects-column"
+          message={search ? 'No series match your search.' : 'No series yet. Set a series name on a book’s metadata.'}
+        />
       )}
 
-      <div className="entity-grid">
+      <CardGrid minWidth={140}>
         {visible.map(entry => {
           const cover = coverUrl(entry.books[0]);
           return (
-            <div key={entry.id} className="entity-card" onClick={() => navigate(`/series/${encodeURIComponent(entry.id)}`)}>
-              <div className="entity-card-cover">
-                {cover ? (
-                  <img src={cover} alt={entry.name} loading="lazy" />
-                ) : (
-                  <div className="book-cover-placeholder">
-                    <i className="pi pi-objects-column" />
-                  </div>
-                )}
-              </div>
-              <div className="entity-card-name" title={entry.name}>
-                {entry.name}
-              </div>
-              <div className="entity-card-count">{entry.books.length} books</div>
-            </div>
+            <EntityCard
+              key={entry.id}
+              to={`/series/${encodeURIComponent(entry.id)}`}
+              name={entry.name}
+              count={`${entry.books.length} books`}
+              media={
+                <div className="overflow-hidden" style={{ aspectRatio: '2 / 3' }}>
+                  {cover ? (
+                    <img src={cover} alt={entry.name} loading="lazy" className="block w-full h-full" style={{ objectFit: 'cover' }} />
+                  ) : (
+                    <CoverPlaceholder icon="pi-objects-column" />
+                  )}
+                </div>
+              }
+            />
           );
         })}
-      </div>
+      </CardGrid>
     </div>
   );
 }

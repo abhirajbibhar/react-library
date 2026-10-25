@@ -6,12 +6,17 @@ import { useBook } from '../hooks/useApi';
 import { bookProgressPercent, fileUrl } from '../api/types';
 import CbxReader from './CbxReader';
 import EbookReader from './EbookReader';
-import './readers.css';
+import { ReaderLoading, ReaderMessage } from './ReaderChrome';
 
 // The EmbedPDF viewer is large; load it only when a PDF is opened.
 const PdfReader = lazy(() => import('./PdfReader'));
 
 const READABLE_TYPES = new Set(['EPUB', 'PDF', 'CBX']);
+
+/** Loading / not-found / unsupported states stay inside the layout instead of covering it. */
+function InlineStatus({ children }: { children: React.ReactNode }) {
+  return <div className="relative flex-1 min-h-0">{children}</div>;
+}
 
 /** Route component: /read/:bookId — dispatches to the right reader. */
 export default function ReaderPage() {
@@ -23,23 +28,19 @@ export default function ReaderPage() {
 
   if (isLoading) {
     return (
-      <div className="reader-root reader-root-inline">
-        <div className="reader-loading">
-          <i className="pi pi-spinner pi-spin" />
-          <span>Loading book…</span>
-        </div>
-      </div>
+      <InlineStatus>
+        <ReaderLoading label="Loading book…" />
+      </InlineStatus>
     );
   }
 
   if (!book) {
     return (
-      <div className="reader-root reader-root-inline">
-        <div className="reader-message">
-          <h2>Book not found</h2>
+      <InlineStatus>
+        <ReaderMessage title="Book not found">
           <Button label="Back to books" link onClick={() => navigate('/all-books')} />
-        </div>
-      </div>
+        </ReaderMessage>
+      </InlineStatus>
     );
   }
 
@@ -50,12 +51,9 @@ export default function ReaderPage() {
       return (
         <Suspense
           fallback={
-            <div className="reader-root reader-root-inline">
-              <div className="reader-loading">
-                <i className="pi pi-spinner pi-spin" />
-                <span>Opening PDF…</span>
-              </div>
-            </div>
+            <InlineStatus>
+              <ReaderLoading label="Opening PDF…" />
+            </InlineStatus>
           }
         >
           <PdfReader key={book.id} book={book} />
@@ -67,14 +65,13 @@ export default function ReaderPage() {
 
   const canDownload = user?.permissions.canDownload || user?.permissions.admin;
   return (
-    <div className="reader-root reader-root-inline">
-      <div className="reader-message">
-        <h2>No reader for this format yet</h2>
-        <p>
-          <strong>{bookType ?? 'Unknown'}</strong> books cannot be opened in the browser. The
-          EPUB, PDF and CBX readers are available; you can still download the file.
+    <InlineStatus>
+      <ReaderMessage title="No reader for this format yet">
+        <p className="m-0 line-height-3" style={{ maxWidth: '26rem' }}>
+          <strong>{bookType ?? 'Unknown'}</strong> books cannot be opened in the browser. The EPUB, PDF and CBX readers
+          are available; you can still download the file.
         </p>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <Button label="Back to book" outlined onClick={() => navigate(`/book/${book.id}`)} />
           {canDownload ? (
             <Button
@@ -86,10 +83,8 @@ export default function ReaderPage() {
             />
           ) : null}
         </div>
-        <span className="reader-footer-label">
-          Reading progress: {bookProgressPercent(book)}%
-        </span>
-      </div>
-    </div>
+        <span className="text-sm">Reading progress: {bookProgressPercent(book)}%</span>
+      </ReaderMessage>
+    </InlineStatus>
   );
 }

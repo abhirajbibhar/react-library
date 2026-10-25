@@ -10,6 +10,7 @@ import { tokenStore } from '../api/client';
 import { useProgressSaver } from './progress';
 import { clampPage, pagePercentage } from './readerUtils';
 import wasmUrl from './pdfiumWasm';
+import { useTheme } from '../theme/ThemeContext';
 
 /**
  * PDF reader built on EmbedPDF. It fills the app layout (below the topbar,
@@ -18,15 +19,18 @@ import wasmUrl from './pdfiumWasm';
  */
 export default function PdfReader({ book }: { book: Book }) {
   const saver = useProgressSaver(book.id);
+  const { mode } = useTheme();
   const startPage = book.pdfProgress?.page ?? 1;
 
   // The config object is read once when the viewer mounts. PdfReader is keyed
   // by book id (see ReaderPage), so a new book always gets a fresh viewer.
+  // Switching the app theme while a PDF is open takes effect on the next open.
   const config = useMemo<PDFViewerConfig>(() => {
     const token = tokenStore.access;
     return {
       wasmUrl,
-      theme: { preference: 'light' },
+      // Follows the app theme at the time the book is opened.
+      theme: { preference: mode },
       tabBar: 'never',
       // Hide these toolbar tabs / menu entries (and the features behind them).
       disabledCategories: [
@@ -80,8 +84,8 @@ export default function PdfReader({ book }: { book: Book }) {
   };
 
   return (
-    <div className="pdf-page">
-      <PDFViewer config={config} style={{ width: '100%', height: '100%' }} onReady={handleReady} />
+    <div className="flex flex-column flex-1 min-h-0 surface-card">
+      <PDFViewer config={config} style={{ width: '100%', height: '100%', flex: '1 1 auto', minHeight: 0 }} onReady={handleReady} />
     </div>
   );
 }

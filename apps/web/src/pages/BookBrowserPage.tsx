@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Button } from 'primereact/button';
 import { Column } from 'primereact/column';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { DataTable } from 'primereact/datatable';
 import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
 import { ProgressBar } from 'primereact/progressbar';
 import { Rating } from 'primereact/rating';
+import { SelectButton } from 'primereact/selectbutton';
 import { Tag } from 'primereact/tag';
+import { Toolbar } from 'primereact/toolbar';
 import { useAuth } from '../auth/AuthContext';
 import { useMedia } from '../hooks/useMedia';
 import BookCard, { BookCardSkeleton } from '../components/BookCard';
 import BookFilterPanel from '../components/BookFilterPanel';
+import CardGrid from '../components/CardGrid';
+import PageHeader from '../components/PageHeader';
+import SearchField from '../components/SearchField';
+import { EmptyState } from '../components/States';
 import ShelfAssignerDialog from '../components/ShelfAssignerDialog';
 import { coverUrl } from '../api/types';
 import type { Book, ReadStatus } from '../api/types';
@@ -24,6 +29,11 @@ import { SORT_OPTIONS, sortBooks, type SortDirection, type SortField } from '../
 const stored = (key: string, fallback: string) => localStorage.getItem(key) ?? fallback;
 
 type EntityType = 'all' | 'library' | 'shelf' | 'unshelved';
+
+const VIEW_OPTIONS = [
+  { label: 'Grid view', value: 'grid', icon: 'pi pi-th-large' },
+  { label: 'Table view', value: 'table', icon: 'pi pi-list' }
+];
 
 export default function BookBrowserPage() {
   const { libraryId, shelfId } = useParams();
@@ -136,28 +146,15 @@ export default function BookBrowserPage() {
     });
   };
 
-  const toggleView = () => setViewMode(mode => (mode === 'grid' ? 'table' : 'grid'));
-
   /* ------------------------------ rendering ------------------------------ */
 
   const renderGrid = () => (
-    <div className="book-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(var(--grid-min-width, 150px), 1fr))' }}>
+    <CardGrid>
       {sorted.map(book => (
         <BookCard key={book.id} book={book} selected={selectedIds.has(book.id)} onToggleSelect={b => toggleSelect(b)} />
       ))}
-    </div>
+    </CardGrid>
   );
-
-  const coverCell = (book: Book | TableRow) => {
-    const cover = coverUrl(book);
-    return cover ? (
-      <img src={cover} alt="" className="table-cover" loading="lazy" />
-    ) : (
-      <div className="table-cover table-cover-placeholder">
-        <i className="pi pi-book" />
-      </div>
-    );
-  };
 
   const tableRows = useMemo(
     () =>
@@ -171,47 +168,66 @@ export default function BookBrowserPage() {
   );
   type TableRow = (typeof tableRows)[number];
 
+  const coverCell = (book: TableRow) => {
+    const cover = coverUrl(book);
+    return cover ? (
+      <img
+        src={cover}
+        alt=""
+        loading="lazy"
+        className="border-round flex-shrink-0"
+        style={{ width: '2.25rem', height: '3.25rem', objectFit: 'cover' }}
+      />
+    ) : (
+      <div
+        className="flex align-items-center justify-content-center border-round flex-shrink-0 surface-200 text-color-secondary"
+        style={{ width: '2.25rem', height: '3.25rem' }}
+      >
+        <i className="pi pi-book" />
+      </div>
+    );
+  };
+
   const renderTable = () => (
     <DataTable
       value={tableRows}
+      dataKey="id"
       size="small"
       stripedRows
       paginator
       rows={50}
       rowsPerPageOptions={[25, 50, 100]}
+      scrollable
+      selectionMode="checkbox"
+      selection={tableRows.filter(row => selectedIds.has(row.id))}
+      onSelectionChange={event => setSelectedIds(new Set((event.value as TableRow[]).map(row => row.id)))}
       sortField={sortField}
       sortOrder={sortDir === 'asc' ? 1 : -1}
       onSort={event => {
         if (event.sortField) setSortField(event.sortField as SortField);
         setSortDir(event.sortOrder === 1 || event.sortOrder === undefined ? 'asc' : 'desc');
       }}
-      className="book-table"
     >
+      <Column selectionMode="multiple" headerStyle={{ width: '3rem' }} />
       <Column
-        header={
-          <input
-            type="checkbox"
-            checked={selectedIds.size > 0 && selectedIds.size === sorted.length}
-            onChange={event => (event.target.checked ? selectAll() : clearSelection())}
-            aria-label="Select all"
-          />
-        }
-        style={{ width: '2.5rem' }}
+        field="title"
+        header="Title"
+        sortable
+        style={{ minWidth: '16rem' }}
         body={(book: TableRow) => (
-          <input
-            type="checkbox"
-            checked={selectedIds.has(book.id)}
-            onChange={() => toggleSelect(book)}
-            aria-label={`Select ${book.title}`}
-          />
+          <div className="flex align-items-center gap-3 min-w-0">
+            {coverCell(book)}
+            <Link
+              to={`/book/${book.id}`}
+              title={book.title}
+              className="text-color font-medium no-underline hover:text-primary white-space-nowrap overflow-hidden text-overflow-ellipsis"
+              style={{ maxWidth: '22rem' }}
+            >
+              {book.title}
+            </Link>
+          </div>
         )}
       />
-      <Column field="title" header="Title" sortable body={(book: TableRow) => (
-        <div className="table-title-cell">
-          {coverCell(book)}
-          <span title={book.title}>{book.title}</span>
-        </div>
-      )} />
       <Column field="author" header="Author" sortable />
       <Column field="seriesName" header="Series" sortable />
       <Column
@@ -219,7 +235,10 @@ export default function BookBrowserPage() {
         header="Status"
         sortable
         body={(book: TableRow) => (
-          <Tag value={READ_STATUS_LABELS[book.readStatus] ?? book.readStatus} severity={book.readStatus === 'READ' ? 'success' : 'info'} />
+          <Tag
+            value={READ_STATUS_LABELS[book.readStatus] ?? book.readStatus}
+            severity={book.readStatus === 'READ' ? 'success' : 'info'}
+          />
         )}
       />
       <Column
@@ -227,7 +246,8 @@ export default function BookBrowserPage() {
         header="Rating"
         sortable
         body={(book: TableRow) =>
-          book.personalRating ? <Rating value={book.personalRating} readOnly cancel={false} stars={5} /> : null
+          // Ratings are stored on a 0-10 scale; the stars show 0-5.
+          book.personalRating ? <Rating value={book.personalRating / 2} readOnly cancel={false} stars={5} /> : null
         }
       />
       <Column field="addedOn" header="Added" sortable body={(book: TableRow) => formatDate(book.addedOn)} />
@@ -239,67 +259,74 @@ export default function BookBrowserPage() {
   const selectedCount = selectedIds.size;
 
   return (
-    <div className="book-browser">
+    <div className="flex flex-column gap-3">
       <ConfirmDialog />
-      <div className="browser-header">
-        <div className="browser-title">
-          <h2>{title}</h2>
-          <span className="browser-count">{sorted.length} books</span>
-        </div>
-        <div className="browser-toolbar">
-          <div className="browser-search">
-            <i className="pi pi-search" />
-            <InputText
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Search title, author, series, ISBN"
-            />
-            {search && <i className="pi pi-times search-clear" onClick={() => setSearch('')} />}
-          </div>
-          <Dropdown
-            value={sortField}
-            options={SORT_OPTIONS.map(option => ({ label: option.label, value: option.field }))}
-            onChange={event => setSortField(event.value)}
-            className="sort-dropdown"
-          />
-          <Button
-            icon={sortDir === 'asc' ? 'pi pi-sort-alpha-down' : 'pi pi-sort-alpha-up'}
-            text
-            severity="secondary"
-            onClick={() => setSortDir(dir => (dir === 'asc' ? 'desc' : 'asc'))}
-            tooltip="Toggle sort direction"
-          />
-          <Button
-            icon={viewMode === 'grid' ? 'pi pi-list' : 'pi pi-th-large'}
-            text
-            severity="secondary"
-            onClick={toggleView}
-            tooltip={viewMode === 'grid' ? 'Table view' : 'Grid view'}
-          />
-          <Button
-            icon={filtersActive ? 'pi pi-filter' : 'pi pi-filter-fill'}
-            text
-            severity={filtersActive ? 'info' : 'secondary'}
-            onClick={() => setFilterPanelOpen(open => !open)}
-            tooltip="Filters"
-          />
-        </div>
-      </div>
+      <PageHeader title={title} subtitle={`${sorted.length} books`} />
 
-      <div className={`browser-body${filterPanelOpen && !isMobile ? ' with-filter-panel' : ''}`}>
-        <div className="browser-content">
+      <Toolbar
+        className="surface-card"
+        start={
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search title, author, series, ISBN"
+            className="w-full md:w-20rem"
+          />
+        }
+        end={
+          <div className="flex flex-wrap align-items-center gap-2">
+            <Dropdown
+              value={sortField}
+              options={SORT_OPTIONS.map(option => ({ label: option.label, value: option.field }))}
+              onChange={event => setSortField(event.value)}
+              aria-label="Sort by"
+            />
+            <Button
+              icon={sortDir === 'asc' ? 'pi pi-sort-alpha-down' : 'pi pi-sort-alpha-up'}
+              text
+              rounded
+              severity="secondary"
+              onClick={() => setSortDir(dir => (dir === 'asc' ? 'desc' : 'asc'))}
+              aria-label="Toggle sort direction"
+              tooltip="Toggle sort direction"
+            />
+            <SelectButton
+              value={viewMode}
+              options={VIEW_OPTIONS}
+              optionValue="value"
+              allowEmpty={false}
+              onChange={event => setViewMode(event.value as 'grid' | 'table')}
+              itemTemplate={option => <i className={option.icon} aria-label={option.label} />}
+            />
+            <Button
+              icon="pi pi-filter"
+              text={!filterPanelOpen}
+              rounded
+              severity={filtersActive ? undefined : 'secondary'}
+              badge={filtersActive ? '•' : undefined}
+              badgeClassName="p-badge-danger"
+              onClick={() => setFilterPanelOpen(open => !open)}
+              aria-label="Filters"
+              tooltip="Filters"
+            />
+          </div>
+        }
+      />
+
+      <div className="flex gap-3 align-items-start">
+        <div className="flex-1 min-w-0">
           {isLoading && (
-            <div className="book-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            <CardGrid>
               {Array.from({ length: 12 }).map((_, index) => (
                 <BookCardSkeleton key={index} />
               ))}
-            </div>
+            </CardGrid>
           )}
           {!isLoading && sorted.length === 0 && (
-            <div className="empty-state">
-              <i className="pi pi-book" />
-              <p>{filtersActive ? 'No books match the current filters.' : 'No books yet. Upload some to get started.'}</p>
-            </div>
+            <EmptyState
+              icon="pi-book"
+              message={filtersActive ? 'No books match the current filters.' : 'No books yet. Upload some to get started.'}
+            />
           )}
           {!isLoading && sorted.length > 0 && (viewMode === 'grid' ? renderGrid() : renderTable())}
         </div>
@@ -319,41 +346,46 @@ export default function BookBrowserPage() {
       </div>
 
       {selectedCount > 0 && (
-        <div className="selection-footer">
-          <div className="selection-count">
-            <i className="pi pi-check-circle" /> {selectedCount} selected
-          </div>
-          <div className="selection-actions">
-            <Button
-              icon="pi pi-bookmark-fill"
-              outlined
-              severity="info"
-              tooltip="Assign to shelf"
-              onClick={() => setAssignerOpen(true)}
-            />
-            {entityType === 'shelf' && (
+        <Toolbar
+          className="shadow-4 border-round-xl z-5 gap-2"
+          style={{ position: 'fixed', left: '50%', bottom: '1rem', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 1rem)' }}
+          start={
+            <span className="flex align-items-center gap-2 white-space-nowrap font-medium">
+              <i className="pi pi-check-circle text-primary" /> {selectedCount} selected
+            </span>
+          }
+          end={
+            <div className="flex flex-wrap align-items-center gap-2">
               <Button
-                icon="pi pi-bookmark"
+                icon="pi pi-bookmark-fill"
                 outlined
-                severity="info"
-                tooltip="Remove from this shelf"
-                onClick={unshelf}
+                aria-label="Assign to shelf"
+                tooltip="Assign to shelf"
+                onClick={() => setAssignerOpen(true)}
               />
-            )}
-            <Dropdown
-              value={null}
-              options={READ_STATUS_OPTIONS}
-              onChange={event => changeStatus(event.value as ReadStatus)}
-              placeholder="Set status"
-              className="status-dropdown"
-            />
-            <Button icon="pi pi-check-square" outlined severity="success" tooltip="Select all" onClick={selectAll} />
-            <Button icon="pi pi-times" outlined severity="warning" tooltip="Clear selection" onClick={clearSelection} />
-            {user?.permissions.canDeleteBook && (
-              <Button icon="pi pi-trash" outlined severity="danger" tooltip="Delete selected" onClick={confirmDelete} />
-            )}
-          </div>
-        </div>
+              {entityType === 'shelf' && (
+                <Button
+                  icon="pi pi-bookmark"
+                  outlined
+                  aria-label="Remove from this shelf"
+                  tooltip="Remove from this shelf"
+                  onClick={unshelf}
+                />
+              )}
+              <Dropdown
+                value={null}
+                options={READ_STATUS_OPTIONS}
+                onChange={event => changeStatus(event.value as ReadStatus)}
+                placeholder="Set status"
+              />
+              <Button icon="pi pi-check-square" outlined severity="success" aria-label="Select all" tooltip="Select all" onClick={selectAll} />
+              <Button icon="pi pi-times" outlined severity="warning" aria-label="Clear selection" tooltip="Clear selection" onClick={clearSelection} />
+              {user?.permissions.canDeleteBook && (
+                <Button icon="pi pi-trash" outlined severity="danger" aria-label="Delete selected" tooltip="Delete selected" onClick={confirmDelete} />
+              )}
+            </div>
+          }
+        />
       )}
 
       <ShelfAssignerDialog
@@ -362,7 +394,7 @@ export default function BookBrowserPage() {
         books={selectedBooks}
         onDone={clearSelection}
       />
-      <ProgressBar mode="indeterminate" style={{ height: 2, display: updateStatus.isPending ? 'block' : 'none' }} />
+      {updateStatus.isPending && <ProgressBar mode="indeterminate" style={{ height: '2px' }} />}
     </div>
   );
 }
