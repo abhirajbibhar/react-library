@@ -146,8 +146,13 @@ export default function UploadDialog({ visible, onHide }: { visible: boolean; on
     }
 
     setUploading(false);
-    void queryClient.invalidateQueries({ queryKey: ['books'] });
-    void queryClient.invalidateQueries({ queryKey: ['libraries'] });
+    // Await the refetches so book counts (libraries, shelves) are already
+    // refreshed when the dialog closes and its success toast appears.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['books'] }),
+      queryClient.invalidateQueries({ queryKey: ['libraries'] }),
+      queryClient.invalidateQueries({ queryKey: ['shelves'] })
+    ]);
     toast.current?.show({
       severity: failureCount === 0 ? 'success' : 'warn',
       summary: 'Upload finished',

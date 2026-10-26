@@ -1,6 +1,6 @@
 import { Context, Hono } from 'hono';
 import { AppEnv, canSeeLibrary } from '../context';
-import { fileKey } from '../store';
+import { resolveFileKey } from '../store';
 import { BookRecord, HttpError } from '../types';
 import { ZipArchive, ZipError } from '../zip';
 
@@ -39,7 +39,7 @@ export function registerCbxRoutes(app: Hono<AppEnv>): void {
 
   const openZip = async (c: Context<AppEnv>, record: BookRecord): Promise<ZipArchive> => {
     try {
-      return await ZipArchive.open(c.env.Library, fileKey(record.id, EXT_OF(record.fileName)));
+      return await ZipArchive.open(c.env.Library, resolveFileKey(record));
     } catch (cause) {
       if (cause instanceof ZipError) throw new HttpError(400, cause.message);
       throw cause;

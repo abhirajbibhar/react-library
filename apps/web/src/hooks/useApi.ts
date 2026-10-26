@@ -98,11 +98,17 @@ export function useUpdateBookShelves() {
 export function useDeleteBooks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ids: number[]) => api.delete<BookDeletionResponse>(`/api/v1/books?ids=${ids.join(',')}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.books });
-      queryClient.invalidateQueries({ queryKey: queryKeys.shelves });
-      queryClient.invalidateQueries({ queryKey: queryKeys.libraries });
+    mutationFn: async (ids: number[]) => {
+      const response = await api.delete<BookDeletionResponse>(`/api/v1/books?ids=${ids.join(',')}`);
+      // Wait for the refetches to land before reporting success, so library
+      // book counts and lists update the moment the dialog closes instead of
+      // showing stale numbers until the next mount.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.books }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.shelves }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.libraries })
+      ]);
+      return response;
     }
   });
 }

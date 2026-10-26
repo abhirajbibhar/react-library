@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { hasPermission, requirePermission } from '../auth';
 import { AppEnv, canSeeLibrary } from '../context';
 import { BookDto, toBookDto } from '../dto';
-import { coverKey, fileKey } from '../store';
+import { bookStorageKeys, coverKey, fileKey, resolveFileKey } from '../store';
 import { recordReading, resolveTimeZone } from '../userData';
 import {
   BOOK_EXTENSIONS,
@@ -318,7 +318,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
       for (const id of ids) {
         const record = index.books.find(b => b.id === id);
         if (!record || !canSeeLibrary(user, record.libraryId)) continue;
-        r2Keys.push(coverKey(id), fileKey(id, EXT_OF(record.fileName)));
+        r2Keys.push(...bookStorageKeys(record));
         index.books = index.books.filter(b => b.id !== id);
       }
       return r2Keys;
@@ -335,7 +335,7 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
     if (!record || !canSeeLibrary(user, record.libraryId)) throw new HttpError(404, 'Book not found');
     if (!hasPermission(user, 'canDownload')) throw new HttpError(403, 'You do not have permission to download books');
 
-    const key = fileKey(record.id, EXT_OF(record.fileName));
+    const key = resolveFileKey(record);
     const rangeHeader = c.req.header('Range');
     let range: R2Range | undefined;
     const match = rangeHeader?.match(/^bytes=(\d*)-(\d*)$/);
@@ -383,13 +383,20 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
     const record = index.books.find(b => b.id === Number(c.req.param('id')));
     if (!record || !canSeeLibrary(user, record.libraryId)) throw new HttpError(404, 'Book not found');
 
-    const object = await c.env.Library.get(coverKey(record.id));
+    const key = coverKey(record.id, record.coverExt ?? 'jpg');
+    const object = await c.env.Library.get(key);
     if (!object) throw new HttpError(404, 'Cover not found');
 
     return new Response(object.body, {
       headers: {
         'Content-Type': object.httpMetadata?.contentType ?? 'image/jpeg',
-        'Cache-Control': 'private, max-age=31536000, immutable'
+        // `public` so browsers may cache this response even though the request
+        // carries credentials (Authorization header / ?token=). Cloudflare's
+        // edge still won't store it because of the Authorization header — for
+        // edge-cached covers the SPA uses the unauthenticated /public/covers
+        // route instead. URL is versioned by ?t=<coverUpdatedOn>, so immutable
+        // is safe: a re-upload produces a brand-new URL.
+        'Cache-Control': 'public, max-age=31536000, immutable'
       }
     });
   });
@@ -432,41 +439,58 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
 
     const now = new Date().toISOString();
 
-    // Write the payload objects first so a book never points at missing bytes.
-    const bookId = await store.update(index => ++index.counters.book);
-    const fileKeyFinal = fileKey(bookId, ext);
-    const coverKeyFinal = coverKey(bookId);
-
-    await c.env.Library.put(fileKeyFinal, file, {
-      httpMetadata: { contentType: file.type || MIME_BY_EXT[ext] }
+    // Reserve the id and record the book in ONE committed write, then upload
+    // the bytes. Splitting "increment counter" and "push record" into two
+    // writes could leave a hole in the counter if anything failed between
+    // them — and a hole makes the next upload's deterministic key point at
+    // bytes that were never written (blank covers). If the byte uploads fail
+    // we remove the record again (and with it the counter bump), so ids stay
+    // dense and always match what is actually stored. The counter itself is
+    // recomputed from the live book list: max(existing id) + 1. A monotonically
+    // incremented counter would let deletes inflate it — after wiping a 40-book
+    // library the next upload would get id 41 while only one book exists, and
+    // stale counts also risk reusing keys of half-deleted books.
+    const created = await store.update(index => {
+      const bookId = index.books.reduce((max, b) => Math.max(max, b.id), 0) + 1;
+      const record: BookRecord = {
+        id: bookId,
+        libraryId,
+        addedOn: now,
+        fileName: file.name,
+        fileKey: fileKey(bookId, file.name),
+        fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
+        bookType,
+        metadata,
+        shelves: [],
+        readStatus: 'UNSET',
+        coverUpdatedOn: cover ? now : undefined,
+        coverExt: cover ? EXT_OF(cover.name) || 'jpg' : undefined
+      };
+      index.books.push(record);
+      return record;
     });
-    if (cover) {
-      await c.env.Library.put(coverKeyFinal, cover, {
-        httpMetadata: { contentType: cover.type || 'image/jpeg' }
-      });
-    }
 
-    let created: BookRecord;
+    const payloadKey = created.fileKey!;
+    const newCoverKey = created.coverExt ? coverKey(created.id, created.coverExt) : undefined;
+
     try {
-      created = await store.update(index => {
-        const record: BookRecord = {
-          id: bookId,
-          libraryId,
-          addedOn: now,
-          fileName: file.name,
-          fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
-          bookType,
-          metadata,
-          shelves: [],
-          readStatus: 'UNSET',
-          coverUpdatedOn: cover ? now : undefined
-        };
-        index.books.push(record);
-        return record;
+      await c.env.Library.put(payloadKey, file, {
+        httpMetadata: { contentType: file.type || MIME_BY_EXT[ext] }
       });
+      if (cover && newCoverKey) {
+        await c.env.Library.put(newCoverKey, cover, {
+          httpMetadata: { contentType: cover.type || `image/${created.coverExt === 'jpg' || created.coverExt === 'jpeg' ? 'jpeg' : created.coverExt}` }
+        });
+      }
     } catch (error) {
-      // Roll back the stored objects so no orphans are left behind.
-      await c.env.Library.delete([fileKeyFinal, ...(cover ? [coverKeyFinal] : [])]).catch(() => undefined);
+      // Roll back the index entry (counter included) and any partial upload.
+      await store
+        .update(index => {
+          index.books = index.books.filter(b => b.id !== created.id);
+          if (index.counters.book === created.id) index.counters.book--;
+        })
+        .catch(() => undefined);
+      await c.env.Library.delete([payloadKey, ...(newCoverKey ? [newCoverKey] : [])]).catch(() => undefined);
       throw error;
     }
 

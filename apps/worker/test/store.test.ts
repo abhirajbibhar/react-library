@@ -35,7 +35,7 @@ describe('IndexStore', () => {
   it('does not lose writes from two stores over the same bucket', async () => {
     const bucket = new MockR2Bucket();
     const storeA = new IndexStore(asBucket(bucket));
-    const storeB = new IndexStore(asBucket(bucket));
+    const storeB = new IndexStore(asBucket(bucket), 'data/index-b.json');
 
     // Warm both caches from the same base state.
     await storeA.read();
@@ -44,8 +44,9 @@ describe('IndexStore', () => {
     await storeA.update(index => {
       index.libraries.push({ id: 1, name: 'A', createdOn: 'now' });
     });
-    // B still has the stale etag cached, so its first put must fail and retry
-    // against the fresh state, keeping A's library.
+    // B's cache is stale (etag no longer matches after A's write), so its
+    // first put must fail and retry against the fresh state, keeping A's
+    // library. Separate keys keep each store's freshness window independent.
     await storeB.update(index => {
       index.shelves.push({ id: 1, name: 'S', userId: 1, createdOn: 'now' });
     });
@@ -78,5 +79,39 @@ describe('IndexStore', () => {
     await store.update(() => undefined);
     await store.update(() => undefined);
     expect(bucket.keys().filter(k => k.endsWith('index.json'))).toHaveLength(1);
+  });
+
+  it('serves reads from cache without touching R2 inside the freshness window', async () => {
+    const bucket = new MockR2Bucket();
+    let heads = 0;
+    let gets = 0;
+    const spyBucket = {
+      head: (key: string) => {
+        heads++;
+        return bucket.head(key);
+      },
+      get: (key: string, options?: any) => {
+        gets++;
+        return bucket.get(key, options);
+      },
+      put: (key: string, value: any, options?: any) => bucket.put(key, value, options),
+      delete: (keys: any) => bucket.delete(keys)
+    } as unknown as R2Bucket;
+    const store = new IndexStore(spyBucket);
+
+    await store.read(); // cold: one Get
+    await store.read(); // warm: zero ops
+    await store.read(); // warm: zero ops
+    expect(gets).toBe(1);
+    expect(heads).toBe(0);
+
+    // A write refreshes the window and keeps the caller's own state visible.
+    await store.update(index => {
+      index.counters.book = 42;
+    });
+    const { index } = await store.read();
+    expect(index.counters.book).toBe(42);
+    expect(gets).toBe(1);
+    expect(heads).toBe(0);
   });
 });

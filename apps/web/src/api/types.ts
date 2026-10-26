@@ -93,6 +93,7 @@ export interface Book {
   readStatusModifiedTime?: string;
   dateFinished?: string;
   coverUpdatedOn?: string;
+  coverExt?: string;
   epubProgress?: { cfi: string; percentage: number };
   pdfProgress?: { page: number; percentage: number };
   cbxProgress?: { page: number; percentage: number };
@@ -165,15 +166,19 @@ export interface ReadingProgressUpdate {
   cbxProgress?: PageProgressUpdate;
 }
 
-import { tokenStore } from '../api/client';
-
-export const coverUrl = (book: Pick<Book, 'id' | 'coverUpdatedOn'>): string => {
-  if (!book.coverUpdatedOn) return '';
+/**
+ * Cover images load from the unauthenticated `/public/covers/<id>` route so
+ * Cloudflare's edge cache can store them (responses with an Authorization
+ * header are never edge-cached). The `t=<coverUpdatedOn>` param versions the
+ * URL: a re-uploaded cover produces a new URL, so no cache ever serves stale
+ * bytes.
+ */
+export const coverUrl = (book: Pick<Book, 'id' | 'coverUpdatedOn' | 'coverExt'>): string => {
+  if (!book.coverUpdatedOn || !book.coverExt) return '';
   const params = new URLSearchParams();
   params.set('t', book.coverUpdatedOn);
-  const token = tokenStore.access;
-  if (token) params.set('token', token);
-  return `/api/v1/books/${book.id}/cover?${params.toString()}`;
+  params.set('ext', book.coverExt);
+  return `/public/covers/${book.id}?${params.toString()}`;
 };
 
 export const fileUrl = (bookId: number): string => `/api/v1/books/${bookId}/file`;

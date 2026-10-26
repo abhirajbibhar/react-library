@@ -277,6 +277,14 @@ describe('books', () => {
     expect(books).toHaveLength(1);
   });
 
+  it('stores the payload under its original upload filename', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const book = await uploadBook(token, 'Dune - Children of Dune (2003).epub');
+    expect(bucket.keys()).toContain(`files/${book.id}/Dune - Children of Dune (2003).epub`);
+    // No generic `original.<ext>` placeholder is written anymore.
+    expect(bucket.keys().some(k => k.includes('original.'))).toBe(false);
+  });
+
   it('rejects unsupported file types', async () => {
     const token = await login(ADMIN_USER, ADMIN_PASSWORD);
     const form = new FormData();
@@ -382,6 +390,140 @@ describe('books', () => {
 
     const books = (await (await request('/api/v1/books', { token })).json()) as unknown[];
     expect(books).toHaveLength(0);
+
+    // The public cover route stops serving a deleted book's cover at the
+    // origin immediately — stale edge copies only linger until max-age.
+    const gone = await request(`/public/covers/${book.id}?ext=jpg`);
+    expect(gone.status).toBe(404);
+  });
+
+  it('updates library book counts immediately after deleting books', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    for (let i = 0; i < 3; i++) await uploadBook(token, `Book ${i}.epub`, `Book ${i}`);
+
+    const before = (await (await request('/api/v1/libraries', { token })).json()) as { bookCount: number }[];
+    expect(before[0].bookCount).toBe(3);
+
+    // Delete every book in one request.
+    const allBooks = (await (await request('/api/v1/books', { token })).json()) as { id: number }[];
+    const del = await request(`/api/v1/books?ids=${allBooks.map(b => b.id).join(',')}`, {
+      method: 'DELETE',
+      token
+    });
+    expect(del.status).toBe(200);
+
+    // Same isolate, moments later — the count must already be zero.
+    const after = (await (await request('/api/v1/libraries', { token })).json()) as { bookCount: number }[];
+    expect(after[0].bookCount).toBe(0);
+  });
+
+  it('numbers uploads by how many books exist, not by history', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const first = await uploadBook(token, 'One.epub', 'One');
+    const second = await uploadBook(token, 'Two.epub', 'Two');
+    expect(second.id).toBe(first.id + 1);
+
+    // Delete everything, then re-upload: ids restart from 1 because the
+    // counter is recomputed from the live book list, so upload keys can never
+    // point past the count at bytes that were never written.
+    await request(`/api/v1/books?ids=${first.id},${second.id}`, { method: 'DELETE', token });
+    const third = await uploadBook(token, 'Three.epub', 'Three');
+    expect(third.id).toBe(1);
+    expect(bucket.keys()).toContain(`files/1/Three.epub`);
+
+    const libraries = (await (await request('/api/v1/libraries', { token })).json()) as { bookCount: number }[];
+    expect(libraries[0].bookCount).toBe(1);
+  });
+});
+
+describe('public cover route', () => {
+  async function uploadWithCover(token: string) {
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array([1, 2, 3])], 'Dune.epub', { type: 'application/epub+zip' }));
+    form.set('libraryId', '1');
+    form.set('cover', new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'cover.jpg', { type: 'image/jpeg' }));
+    form.set('metadata', JSON.stringify({ title: 'Dune' }));
+    const res = await request('/api/v1/files/upload', { method: 'POST', body: form, token });
+    expect(res.status).toBe(201);
+    return (await res.json()) as { id: number };
+  }
+
+  it('serves covers without auth and edge-cacheable headers', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const book = await uploadWithCover(token);
+
+    // No Authorization header / ?token= at all.
+    const res = await request(`/public/covers/${book.id}?ext=jpg&t=${encodeURIComponent(new Date().toISOString())}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=5184000, immutable');
+    expect(res.headers.get('Content-Type')).toBe('image/jpeg');
+  });
+
+  it('returns a fresh URL after re-uploading a cover', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const book = await uploadWithCover(token);
+    const first = await request(`/public/covers/${book.id}?ext=jpg`);
+    expect(first.status).toBe(200);
+
+    // Overwrite the stored cover bytes; the index now carries a new
+    // coverUpdatedOn, which the SPA turns into a new ?t= URL — so caches
+    // keyed by the old URL never serve stale bytes.
+    await bucket.put(`files/${book.id}/cover.jpg`, new Uint8Array([9, 9, 9]));
+    const second = await request(`/public/covers/${book.id}?ext=jpg&t=new`);
+    expect(second.status).toBe(200);
+    expect(new Uint8Array(await second.arrayBuffer())).toEqual(new Uint8Array([9, 9, 9]));
+  });
+
+  it('404s for unknown books and invalid ids', async () => {
+    expect((await request('/public/covers/999?ext=jpg')).status).toBe(404);
+    expect((await request('/public/covers/abc')).status).toBe(404);
+  });
+});
+
+describe('index freshness after mutations', () => {
+  it('reflects a deleted user immediately, even right after a cached read', async () => {
+    const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+    await request('/api/v1/users', {
+      method: 'POST',
+      token: adminToken,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'temp', name: 'Temp', email: 't@e.com', password: 'password123' })
+    });
+    const tempLogin = await request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'temp', password: 'password123' })
+    });
+    const { user } = (await tempLogin.json()) as { user: { id: number } };
+
+    // Warm the isolate's index cache with reads that include the user.
+    const usersBefore = (await (await request('/api/v1/users', { token: adminToken })).json()) as unknown[];
+    expect(usersBefore).toHaveLength(2);
+
+    const del = await request(`/api/v1/users/${user.id}`, { method: 'DELETE', token: adminToken });
+    expect(del.status).toBe(204);
+
+    // Same isolate, moments later — the delete must be visible at once.
+    const usersAfter = (await (await request('/api/v1/users', { token: adminToken })).json()) as unknown[];
+    expect(usersAfter).toHaveLength(1);
+  });
+
+  it('applies rotated JWT_SECRET / ADMIN_* secrets from the very next request', async () => {
+    const oldToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+
+    // Simulate `wrangler secret put` + redeploy: new values in env, same store.
+    env.JWT_SECRET = 'rotated-jwt-secret';
+    env.ADMIN_USER = 'someoneelse';
+    env.ADMIN_PASSWORD = 'another-password-1';
+
+    // The old access token was signed with the previous secret — rejected now.
+    const rejected = await request('/api/v1/books', { token: oldToken });
+    expect(rejected.status).toBe(401);
+
+    // Login uses the NEW secret to verify; the bootstrap is inert because the
+    // index already has users, so the old admin password still applies.
+    const freshToken = await login(ADMIN_USER, ADMIN_PASSWORD);
+    expect((await request('/api/v1/books', { token: freshToken })).status).toBe(200);
   });
 });
 

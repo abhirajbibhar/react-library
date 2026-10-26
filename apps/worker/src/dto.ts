@@ -52,6 +52,8 @@ export interface BookDto {
   readStatusModifiedTime?: string;
   dateFinished?: string;
   coverUpdatedOn?: string;
+  /** Extension of the stored cover image (jpg/png/webp…); absent = no cover. */
+  coverExt?: string;
   epubProgress?: BookRecord['epubProgress'];
   pdfProgress?: BookRecord['pdfProgress'];
   cbxProgress?: BookRecord['cbxProgress'];
@@ -114,6 +116,7 @@ export function toBookDto(record: BookRecord, libraryName: string, shelves: Shel
     readStatusModifiedTime: record.readStatusModifiedTime,
     dateFinished: record.dateFinished,
     coverUpdatedOn: record.coverUpdatedOn,
+    coverExt: record.coverExt,
     epubProgress: record.epubProgress,
     pdfProgress: record.pdfProgress,
     cbxProgress: record.cbxProgress

@@ -15,8 +15,6 @@ import { useActivity } from '../hooks/useJournal';
 import { formatDuration, formatLongDate, greeting, todayKey } from '../utils/dates';
 import { computeStreaks } from '../utils/streak';
 
-const READABLE = new Set(['EPUB', 'PDF', 'CBX']);
-
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -88,18 +86,7 @@ export default function DashboardPage() {
           ) : (
             <BookRow>
               {continueReading.map(book => (
-                <div key={book.id} className="flex flex-column gap-2">
-                  <BookCard book={book} selected={false} selectionEnabled={false} />
-                  {READABLE.has(book.primaryFile?.bookType ?? '') && (
-                    <Button
-                      label="Continue"
-                      icon="pi pi-book"
-                      size="small"
-                      outlined
-                      onClick={() => navigate(`/read/${book.id}`)}
-                    />
-                  )}
-                </div>
+                <BookCard key={book.id} book={book} selected={false} selectionEnabled={false} />
               ))}
             </BookRow>
           )}

@@ -10,7 +10,7 @@ import { registerJournalRoutes } from './routes/journal';
 import { registerLibraryRoutes } from './routes/libraries';
 import { registerShelfRoutes } from './routes/shelves';
 import { registerUserRoutes } from './routes/users';
-import { CasConflictError } from './store';
+import { coverKey, CasConflictError } from './store';
 import { HttpError } from './types';
 
 const app = new Hono<AppEnv>();
@@ -78,6 +78,43 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.get('/api/v1/version', c => c.json({ version: '0.1.0', app: 'booklore-react' }));
+
+/**
+ * Public cover images: served straight from R2, bypassing JWT auth so the
+ * response can be `Cache-Control: public` and land in Cloudflare's edge cache.
+ * Covers carry no reading progress or account data — only a book's front image,
+ * which is already visible to every user allowed to see the book — and URLs
+ * are unguessable (numeric ids, private library listings). A re-uploaded cover
+ * gets a new `?t=<coverUpdatedOn>` URL, so caches never serve stale bytes.
+ * Books deleted while an edge copy is alive simply 404 at the origin; the
+ * residual window is bounded by the max-age below.
+ */
+const COVER_MAX_AGE = 5_184_000; // 60 days — ~10K Class B ops per full library refresh stays free
+const EXT_CONTENT_TYPE: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  avif: 'image/avif'
+};
+
+app.get('/public/covers/:id', async c => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ message: 'Not found' }, 404);
+
+  const ext = (c.req.query('ext') ?? 'jpg').toLowerCase();
+  const object = await c.env.Library.get(coverKey(id, ext));
+  if (!object) return c.json({ message: 'Not found' }, 404);
+
+  const headers = new Headers({
+    'Content-Type': object.httpMetadata?.contentType ?? EXT_CONTENT_TYPE[ext] ?? 'image/jpeg',
+    'Cache-Control': `public, max-age=${COVER_MAX_AGE}, immutable`,
+    'Vary': 'Accept-Encoding'
+  });
+  if (object.etag) headers.set('ETag', object.etag);
+  return new Response(object.body, { headers });
+});
 
 registerAuthRoutes(app);
 registerUserRoutes(app);

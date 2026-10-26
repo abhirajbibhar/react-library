@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Avatar } from 'primereact/avatar';
 import { Button } from 'primereact/button';
@@ -10,7 +10,6 @@ import { InputText } from 'primereact/inputtext';
 import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
 import { SelectButton } from 'primereact/selectbutton';
-import { TabView, TabPanel } from 'primereact/tabview';
 import { Tag } from 'primereact/tag';
 import { Toast } from 'primereact/toast';
 import { api } from '../api/client';
@@ -30,20 +29,11 @@ function useToast() {
   return { toast, node };
 }
 
-function TabHeader({ title, action }: { title: string; action?: ReactNode }) {
-  return (
-    <div className="flex justify-content-between align-items-center mb-3">
-      <h3 className="m-0 text-xl font-semibold">{title}</h3>
-      {action}
-    </div>
-  );
-}
-
 const FORM_MESSAGE_CLASS = 'w-full justify-content-start';
 
 /* ------------------------------ libraries ------------------------------- */
 
-function LibrariesTab() {
+function LibrariesSection() {
   const { toast, node } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -111,32 +101,34 @@ function LibrariesTab() {
   };
 
   return (
-    <div>
+    <div className="flex flex-column gap-3">
       {node}
       <ConfirmDialog />
-      <TabHeader
+      <SectionCard
         title="Libraries"
+        icon="pi-folder"
         action={canManage && <Button label="New Library" icon="pi pi-plus" size="small" onClick={openCreate} />}
-      />
-      <div className="flex flex-column">
-        {(libraries ?? []).length === 0 && <p className="text-color-secondary">No libraries yet.</p>}
-        {(libraries ?? []).map(library => (
-          <ListRow
-            key={library.id}
-            icon="pi-folder"
-            title={library.name}
-            subtitle={`${library.bookCount ?? 0} ${library.bookCount === 1 ? 'book' : 'books'}`}
-            actions={
-              canManage ? (
-                <>
-                  <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${library.name}`} onClick={() => openEdit(library)} {...tip('Edit')} />
-                  <Button icon="pi pi-trash" text rounded severity="danger" aria-label={`Delete ${library.name}`} onClick={() => remove(library)} {...tip('Delete')} />
-                </>
-              ) : undefined
-            }
-          />
-        ))}
-      </div>
+      >
+        <div className="flex flex-column">
+          {(libraries ?? []).length === 0 && <p className="m-0 text-color-secondary">No libraries yet.</p>}
+          {(libraries ?? []).map(library => (
+            <ListRow
+              key={library.id}
+              icon="pi-folder"
+              title={library.name}
+              subtitle={`${library.bookCount ?? 0} ${library.bookCount === 1 ? 'book' : 'books'}`}
+              actions={
+                canManage ? (
+                  <>
+                    <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${library.name}`} onClick={() => openEdit(library)} {...tip('Edit')} />
+                    <Button icon="pi pi-trash" text rounded severity="danger" aria-label={`Delete ${library.name}`} onClick={() => remove(library)} {...tip('Delete')} />
+                  </>
+                ) : undefined
+              }
+            />
+          ))}
+        </div>
+      </SectionCard>
 
       <Dialog
         visible={dialogOpen}
@@ -159,7 +151,7 @@ function LibrariesTab() {
 
 /* -------------------------------- shelves ------------------------------- */
 
-function ShelvesTab() {
+function ShelvesSection() {
   const { toast, node } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -230,37 +222,42 @@ function ShelvesTab() {
   };
 
   return (
-    <div>
+    <div className="flex flex-column gap-3">
       {node}
       <ConfirmDialog />
-      <TabHeader title="Shelves" action={<Button label="New Shelf" icon="pi pi-plus" size="small" onClick={openCreate} />} />
-      <div className="flex flex-column">
-        {(shelves ?? []).length === 0 && <p className="text-color-secondary">No shelves yet.</p>}
-        {(shelves ?? []).map(shelf => (
-          <ListRow
-            key={shelf.id}
-            icon="pi-bookmark"
-            title={shelf.name}
-            subtitle={`${shelf.bookCount ?? 0} ${shelf.bookCount === 1 ? 'book' : 'books'}`}
-            meta={<Tag value={shelf.publicShelf ? 'Public' : 'Private'} severity={shelf.publicShelf ? 'info' : 'secondary'} />}
-            actions={
-              <>
-                <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${shelf.name}`} onClick={() => openEdit(shelf)} {...tip('Edit')} />
-                <Button
-                  icon="pi pi-trash"
-                  text
-                  rounded
-                  severity="danger"
-                  aria-label={`Delete ${shelf.name}`}
-                  onClick={() => remove(shelf)}
-                  {...tip('Delete')}
-                  disabled={Boolean(shelf.userId && shelf.userId !== user?.id && !user?.permissions.admin)}
-                />
-              </>
-            }
-          />
-        ))}
-      </div>
+      <SectionCard
+        title="Shelves"
+        icon="pi-bookmark"
+        action={<Button label="New Shelf" icon="pi pi-plus" size="small" onClick={openCreate} />}
+      >
+        <div className="flex flex-column">
+          {(shelves ?? []).length === 0 && <p className="m-0 text-color-secondary">No shelves yet.</p>}
+          {(shelves ?? []).map(shelf => (
+            <ListRow
+              key={shelf.id}
+              icon="pi-bookmark"
+              title={shelf.name}
+              subtitle={`${shelf.bookCount ?? 0} ${shelf.bookCount === 1 ? 'book' : 'books'}`}
+              meta={<Tag value={shelf.publicShelf ? 'Public' : 'Private'} severity={shelf.publicShelf ? 'info' : 'secondary'} />}
+              actions={
+                <>
+                  <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${shelf.name}`} onClick={() => openEdit(shelf)} {...tip('Edit')} />
+                  <Button
+                    icon="pi pi-trash"
+                    text
+                    rounded
+                    severity="danger"
+                    aria-label={`Delete ${shelf.name}`}
+                    onClick={() => remove(shelf)}
+                    {...tip('Delete')}
+                    disabled={Boolean(shelf.userId && shelf.userId !== user?.id && !user?.permissions.admin)}
+                  />
+                </>
+              }
+            />
+          ))}
+        </div>
+      </SectionCard>
 
       <Dialog
         visible={dialogOpen}
@@ -309,7 +306,7 @@ const defaultPermissions = (): Permissions => ({
   canManageUsers: false
 });
 
-function UsersTab() {
+function UsersSection() {
   const { toast, node } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -323,7 +320,11 @@ function UsersTab() {
   const [newPassword, setNewPassword] = useState('');
 
   if (!user?.permissions.admin) {
-    return <Message severity="warn" text="Admin access is required to manage users." />;
+    return (
+      <div className="flex flex-column gap-3">
+        <Message severity="warn" text="Admin access is required to manage users." />
+      </div>
+    );
   }
 
   const openCreate = () => {
@@ -402,59 +403,64 @@ function UsersTab() {
   };
 
   return (
-    <div>
+    <div className="flex flex-column gap-3">
       {node}
       <ConfirmDialog />
-      <TabHeader title="Users" action={<Button label="New User" icon="pi pi-plus" size="small" onClick={openCreate} />} />
-      <div className="flex flex-column">
-        {(users ?? []).length === 0 && <p className="text-color-secondary">No users.</p>}
-        {(users ?? []).map(target => (
-          <ListRow
-            key={target.id}
-            leading={<Avatar label={(target.name || target.username).charAt(0).toUpperCase()} shape="circle" className="flex-shrink-0" />}
-            title={target.name || target.username}
-            subtitle={`@${target.username} · ${target.email}`}
-            meta={
-              target.permissions.admin ? (
-                <Tag value="Admin" severity="warning" />
-              ) : PERMISSION_LABELS.filter(label => target.permissions[label.key]).length > 0 ? (
-                PERMISSION_LABELS.filter(label => target.permissions[label.key]).map(label => (
-                  <Tag key={label.key} value={label.label} severity="secondary" />
-                ))
-              ) : (
-                <span className="text-xs text-color-secondary">No permissions</span>
-              )
-            }
-            actions={
-              <>
-                <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${target.username}`} onClick={() => openEdit(target)} {...tip('Edit')} />
-                <Button
-                  icon="pi pi-key"
-                  text
-                  rounded
-                  severity="secondary"
-                  aria-label={`Reset password for ${target.username}`}
-                  onClick={() => {
-                    setPasswordReset(target);
-                    setNewPassword('');
-                  }}
-                  {...tip('Reset password')}
-                />
-                <Button
-                  icon="pi pi-trash"
-                  text
-                  rounded
-                  severity="danger"
-                  aria-label={`Delete ${target.username}`}
-                  onClick={() => remove(target)}
-                  {...tip('Delete')}
-                  disabled={target.id === user.id}
-                />
-              </>
-            }
-          />
-        ))}
-      </div>
+      <SectionCard
+        title="Users"
+        icon="pi-users"
+        action={<Button label="New User" icon="pi pi-plus" size="small" onClick={openCreate} />}
+      >
+        <div className="flex flex-column">
+          {(users ?? []).length === 0 && <p className="m-0 text-color-secondary">No users.</p>}
+          {(users ?? []).map(target => (
+            <ListRow
+              key={target.id}
+              leading={<Avatar label={(target.name || target.username).charAt(0).toUpperCase()} shape="circle" className="flex-shrink-0" />}
+              title={target.name || target.username}
+              subtitle={`@${target.username} · ${target.email}`}
+              meta={
+                target.permissions.admin ? (
+                  <Tag value="Admin" severity="warning" />
+                ) : PERMISSION_LABELS.filter(label => target.permissions[label.key]).length > 0 ? (
+                  PERMISSION_LABELS.filter(label => target.permissions[label.key]).map(label => (
+                    <Tag key={label.key} value={label.label} severity="secondary" />
+                  ))
+                ) : (
+                  <span className="text-xs text-color-secondary">No permissions</span>
+                )
+              }
+              actions={
+                <>
+                  <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${target.username}`} onClick={() => openEdit(target)} {...tip('Edit')} />
+                  <Button
+                    icon="pi pi-key"
+                    text
+                    rounded
+                    severity="secondary"
+                    aria-label={`Reset password for ${target.username}`}
+                    onClick={() => {
+                      setPasswordReset(target);
+                      setNewPassword('');
+                    }}
+                    {...tip('Reset password')}
+                  />
+                  <Button
+                    icon="pi pi-trash"
+                    text
+                    rounded
+                    severity="danger"
+                    aria-label={`Delete ${target.username}`}
+                    onClick={() => remove(target)}
+                    {...tip('Delete')}
+                    disabled={target.id === user.id}
+                  />
+                </>
+              }
+            />
+          ))}
+        </div>
+      </SectionCard>
 
       <Dialog
         visible={dialogOpen}
@@ -558,11 +564,11 @@ function UsersTab() {
   );
 }
 
-/* --------------------------------- page --------------------------------- */
+/* -------------------------------- account ------------------------------- */
 
-function AccountTab() {
+function AccountSection() {
   const toast = useRef<Toast>(null);
-  const { logoutAll } = useAuth();
+  const { user, logoutAll } = useAuth();
   const { mode, setMode } = useTheme();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState<string | null>(null);
@@ -603,100 +609,150 @@ function AccountTab() {
   };
 
   return (
-    <div>
+    <div className="flex flex-column gap-3">
       <Toast ref={toast} />
-<div className="grid">
-        <div className="col-12 lg:col-6">
-          <SectionCard title="Change password" icon="pi-key">
-            <form onSubmit={submitPassword} className="flex flex-column gap-3">
-        <FormField label="Current Password" htmlFor="settings-current-password">
-          <Password
-            inputId="settings-current-password"
-            value={form.currentPassword}
-            onChange={update('currentPassword')}
-            feedback={false}
-            toggleMask
-            required
-            className="w-full"
-            inputClassName="w-full"
-          />
-        </FormField>
-        <FormField label="New Password" htmlFor="settings-new-password">
-          <Password
-            inputId="settings-new-password"
-            value={form.newPassword}
-            onChange={update('newPassword')}
-            feedback={false}
-            toggleMask
-            required
-            minLength={8}
-            className="w-full"
-            inputClassName="w-full"
-          />
-        </FormField>
-        <FormField label="Confirm New Password" htmlFor="settings-confirm-password">
-          <Password
-            inputId="settings-confirm-password"
-            value={form.confirmPassword}
-            onChange={update('confirmPassword')}
-            feedback={false}
-            toggleMask
-            required
-            className="w-full"
-            inputClassName="w-full"
-          />
-        </FormField>
-        {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
-        <Button label="Change Password" type="submit" loading={submitting} className="mt-2" />
-      </form>
-          </SectionCard>
+      <SectionCard title="Profile" icon="pi-user">
+        <div className="flex align-items-center gap-3">
+          <Avatar label={(user?.name || user?.username || '?').charAt(0).toUpperCase()} shape="circle" size="xlarge" className="flex-shrink-0" />
+          <div className="flex flex-column gap-1 min-w-0">
+            <span className="text-lg font-semibold">{user?.name || user?.username}</span>
+            <span className="text-sm text-color-secondary">@{user?.username}</span>
+            <span className="text-sm text-color-secondary" style={{ overflowWrap: 'anywhere' }}>{user?.email}</span>
+            {user?.permissions.admin && (
+              <div className="mt-1">
+                <Tag value="Admin" severity="warning" />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="col-12 lg:col-6 flex flex-column gap-3">
-          <SectionCard title="Appearance" icon="pi-palette">
-            <p className="mt-0 mb-3 text-sm text-color-secondary">Also available from the user menu in the top bar.</p>
-            <SelectButton
-              value={mode}
-              options={[
-                { label: 'Light', value: 'light' },
-                { label: 'Dark', value: 'dark' }
-              ]}
-              allowEmpty={false}
-              onChange={event => setMode(event.value as 'light' | 'dark')}
-              aria-label="Theme"
+      </SectionCard>
+      <SectionCard title="Appearance" icon="pi-palette">
+        <p className="mt-0 mb-3 text-sm text-color-secondary">Also available from the user menu in the top bar.</p>
+        <SelectButton
+          value={mode}
+          options={[
+            { label: 'Light', value: 'light' },
+            { label: 'Dark', value: 'dark' }
+          ]}
+          allowEmpty={false}
+          onChange={event => setMode(event.value as 'light' | 'dark')}
+          aria-label="Theme"
+        />
+      </SectionCard>
+      <SectionCard title="Change password" icon="pi-key">
+        <form onSubmit={submitPassword} className="flex flex-column gap-3">
+          <FormField label="Current Password" htmlFor="settings-current-password">
+            <Password
+              inputId="settings-current-password"
+              value={form.currentPassword}
+              onChange={update('currentPassword')}
+              feedback={false}
+              toggleMask
+              required
+              className="w-full"
+              inputClassName="w-full"
             />
-          </SectionCard>
-          <SectionCard title="Sessions" icon="pi-shield">
-            <p className="mt-0 mb-3 text-sm text-color-secondary">Sign out of this and every other device where you are logged in.</p>
-            <Button label="Logout everywhere" icon="pi pi-power-off" severity="danger" outlined onClick={clearSession} />
-          </SectionCard>
-        </div>
-      </div>
+          </FormField>
+          <FormField label="New Password" htmlFor="settings-new-password">
+            <Password
+              inputId="settings-new-password"
+              value={form.newPassword}
+              onChange={update('newPassword')}
+              feedback={false}
+              toggleMask
+              required
+              minLength={8}
+              className="w-full"
+              inputClassName="w-full"
+            />
+          </FormField>
+          <FormField label="Confirm New Password" htmlFor="settings-confirm-password">
+            <Password
+              inputId="settings-confirm-password"
+              value={form.confirmPassword}
+              onChange={update('confirmPassword')}
+              feedback={false}
+              toggleMask
+              required
+              className="w-full"
+              inputClassName="w-full"
+            />
+          </FormField>
+          {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
+          <Button label="Change Password" type="submit" loading={submitting} className="mt-2 self-start" />
+        </form>
+      </SectionCard>
+      <SectionCard title="Sessions" icon="pi-shield">
+        <p className="mt-0 mb-3 text-sm text-color-secondary">Sign out of this and every other device where you are logged in.</p>
+        <Button label="Logout everywhere" icon="pi pi-power-off" severity="danger" outlined onClick={clearSession} className="self-start" />
+      </SectionCard>
     </div>
   );
 }
 
+/* --------------------------------- page --------------------------------- */
+
+type SettingsSectionKey = 'libraries' | 'shelves' | 'users' | 'account';
+
+const SECTION_ICONS: Record<SettingsSectionKey, string> = {
+  libraries: 'pi pi-folder',
+  shelves: 'pi pi-bookmark',
+  users: 'pi pi-users',
+  account: 'pi pi-user'
+};
+
 export default function SettingsPage() {
   const { user } = useAuth();
+  const isAdmin = Boolean(user?.permissions.admin);
+  const [active, setActive] = useState<SettingsSectionKey>('libraries');
+
+  const items: { key: SettingsSectionKey; label: string; description: string }[] = [
+    { key: 'libraries', label: 'Libraries', description: 'Create, rename and delete libraries.' },
+    { key: 'shelves', label: 'Shelves', description: 'Organize books into public or private shelves.' },
+    ...(isAdmin
+      ? [{ key: 'users' as const, label: 'Users', description: 'Manage accounts and permissions.' }]
+      : []),
+    { key: 'account', label: 'Account', description: 'Your profile, appearance and security.' }
+  ];
+
+  const activeItem = items.find(item => item.key === active) ?? items[0];
 
   return (
-    <div className="flex flex-column gap-3" style={{ maxWidth: '68rem' }}>
-      <PageHeader title="Settings" />
-      <TabView scrollable>
-        <TabPanel header="Libraries" leftIcon="pi pi-folder mr-2">
-          <LibrariesTab />
-        </TabPanel>
-        <TabPanel header="Shelves" leftIcon="pi pi-bookmark mr-2">
-          <ShelvesTab />
-        </TabPanel>
-        {user?.permissions.admin && (
-          <TabPanel header="Users" leftIcon="pi pi-users mr-2">
-            <UsersTab />
-          </TabPanel>
-        )}
-        <TabPanel header="Account" leftIcon="pi pi-user mr-2">
-          <AccountTab />
-        </TabPanel>
-      </TabView>
+    <div className="grid" style={{ maxWidth: '72rem' }}>
+      {/* Section navigation: horizontal chips on small screens, vertical rail on large. */}
+      <div className="col-12 lg:col-3">
+        <div className="flex lg:flex-column gap-2 overflow-auto pb-1 lg:pb-0" role="tablist" aria-label="Settings sections">
+          {items.map(item => {
+            const selected = item.key === activeItem.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setActive(item.key)}
+                className={`flex align-items-center gap-3 border-round cursor-pointer text-left transition-colors ${
+                  selected ? 'surface-card shadow-1 text-primary' : 'surface-hover text-color'
+                }`}
+                style={{ padding: '0.75rem 1rem', border: '1px solid var(--surface-border)', minWidth: '11rem' }}
+              >
+                <i className={`pi ${SECTION_ICONS[item.key]} ${selected ? 'text-primary' : 'text-color-secondary'}`} />
+                <span className="font-medium white-space-nowrap">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="col-12 lg:col-9">
+        <PageHeader title={activeItem.label} subtitle={activeItem.description} />
+        <div className="mt-3">
+          {activeItem.key === 'libraries' && <LibrariesSection />}
+          {activeItem.key === 'shelves' && <ShelvesSection />}
+          {activeItem.key === 'users' && <UsersSection />}
+          {activeItem.key === 'account' && <AccountSection />}
+        </div>
+      </div>
     </div>
   );
 }

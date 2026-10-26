@@ -3,9 +3,8 @@ import { requirePermission } from '../auth';
 import { AppEnv, canSeeLibrary } from '../context';
 import { toLibraryDto } from '../dto';
 import { HttpError } from '../types';
-import { coverKey, fileKey } from '../store';
+import { bookStorageKeys } from '../store';
 
-const EXT_OF = (fileName: string) => (fileName.split('.').pop() ?? '').toLowerCase();
 
 export function registerLibraryRoutes(app: Hono<AppEnv>): void {
   app.get('/api/v1/libraries', async c => {
@@ -74,7 +73,7 @@ export function registerLibraryRoutes(app: Hono<AppEnv>): void {
       const library = index.libraries.find(l => l.id === id);
       if (!library) throw new HttpError(404, 'Library not found');
       const removed = index.books.filter(b => b.libraryId === id);
-      const r2Keys = removed.flatMap(b => [coverKey(b.id), fileKey(b.id, EXT_OF(b.fileName))]);
+      const r2Keys = removed.flatMap(b => bookStorageKeys(b));
       index.books = index.books.filter(b => b.libraryId !== id);
       index.libraries = index.libraries.filter(l => l.id !== id);
       // Drop the deleted library from any user library assignments.

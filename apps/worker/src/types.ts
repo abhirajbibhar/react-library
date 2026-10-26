@@ -88,6 +88,12 @@ export interface BookRecord {
   libraryId: number;
   addedOn: string;
   lastReadTime?: string;
+  /**
+   * Exact R2 key of the book's payload file. Written once at upload time so
+   * readers never have to rebuild it from `fileName`. Records created before
+   * this field existed fall back to `legacyFileKey()` below.
+   */
+  fileKey?: string;
   fileName: string;
   fileSizeKb?: number;
   bookType: BookType;
@@ -98,6 +104,8 @@ export interface BookRecord {
   readStatusModifiedTime?: string;
   dateFinished?: string;
   coverUpdatedOn?: string;
+  /** Extension of the stored cover image (e.g. "jpg"); records without a cover omit it. */
+  coverExt?: string;
   epubProgress?: EpubProgress;
   pdfProgress?: PageProgress;
   cbxProgress?: PageProgress;
