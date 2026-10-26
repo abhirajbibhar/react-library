@@ -7,12 +7,14 @@ export default function SearchField({
   value,
   onChange,
   placeholder,
-  className
+  className,
+  small = false
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   className?: string;
+  small?: boolean;
 }) {
   return (
     <IconField iconPosition="right" className={className}>
@@ -30,7 +32,7 @@ export default function SearchField({
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="w-full"
+        className={`w-full${small ? ' p-inputtext-sm' : ''}`}
       />
     </IconField>
   );

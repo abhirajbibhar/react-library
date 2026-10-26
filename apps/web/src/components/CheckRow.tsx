@@ -19,14 +19,14 @@ export default function CheckRow({
       <Checkbox inputId={id} checked={checked} onChange={event => onChange(Boolean(event.checked))} />
       <label
         htmlFor={id}
-        className={`flex-1 min-w-0 cursor-pointer text-sm white-space-nowrap overflow-hidden text-overflow-ellipsis${
+        className={`flex-1 min-w-0 cursor-pointer text-xs white-space-nowrap overflow-hidden text-overflow-ellipsis${
           checked ? ' font-semibold' : ''
         }`}
         title={label}
       >
         {label}
       </label>
-      {count !== undefined && <span className="text-color-secondary text-xs">{count}</span>}
+      {count !== undefined && <span className="text-color-secondary" style={{ fontSize: '0.7rem' }}>{count}</span>}
     </div>
   );
 }

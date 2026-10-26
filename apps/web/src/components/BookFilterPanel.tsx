@@ -50,12 +50,13 @@ export default function BookFilterPanel({
   const openIndexes = visibleFacets.flatMap((facet, index) => (closed.has(facet.type) ? [] : [index]));
 
   const body = (
-    <div className="flex flex-column gap-3">
-      <div className="flex align-items-center gap-2">
+    <div className="flex flex-column gap-2">
+      <div className="flex align-items-center gap-1">
         <SearchField
           value={scopeSearch}
           onChange={setScopeSearch}
           placeholder="Find a filter value"
+          small
           className="flex-1"
         />
         {isFilterActive(selection) && (
@@ -86,6 +87,14 @@ export default function BookFilterPanel({
             return (
               <AccordionTab
                 key={facet.type}
+                pt={{
+                  root: { className: 'mb-0 border-bottom-1 surface-border' },
+                  headerAction: {
+                    className:
+                      'bg-transparent border-none border-noround px-0 py-2 text-xs uppercase font-semibold text-color-secondary'
+                  },
+                  content: { className: 'bg-transparent border-none px-0 pt-1 pb-3' }
+                }}
                 header={
                   <span className="flex align-items-center justify-content-between gap-2 w-full">
                     <span>{FILTER_LABELS[facet.type]}</span>
@@ -93,7 +102,7 @@ export default function BookFilterPanel({
                   </span>
                 }
               >
-                <div className="flex flex-column gap-2 overflow-y-auto" style={{ maxHeight: '16rem', ...THIN_SCROLL }}>
+                <div className="flex flex-column gap-1 overflow-y-auto" style={{ maxHeight: '14rem', ...THIN_SCROLL }}>
                   {facet.values.map(value => (
                     <CheckRow
                       key={String(value.id)}
@@ -137,8 +146,8 @@ export default function BookFilterPanel({
   // Starts with the search field, grows with its content and stops at the screen edge
   // (the parent row has a fixed height, so maxHeight 100% scrolls inside the card).
   return (
-    <div className="flex-shrink-0 overflow-y-auto" style={{ width: '19rem', maxHeight: '100%', ...THIN_SCROLL }}>
-      <Card pt={{ body: { className: 'p-3' }, content: { className: 'p-0' } }}>{body}</Card>
+    <div className="flex-shrink-0 overflow-y-auto" style={{ width: '16rem', maxHeight: '100%', ...THIN_SCROLL }}>
+      <Card pt={{ body: { className: 'px-3 py-2' }, content: { className: 'p-0' } }}>{body}</Card>
     </div>
   );
 }
