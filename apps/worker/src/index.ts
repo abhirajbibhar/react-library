@@ -6,6 +6,7 @@ import { registerAuthRoutes } from './routes/auth';
 import { registerBookRoutes } from './routes/books';
 import { registerCbxRoutes } from './routes/cbx';
 import { registerEpubRoutes } from './routes/epub';
+import { registerJournalRoutes } from './routes/journal';
 import { registerLibraryRoutes } from './routes/libraries';
 import { registerShelfRoutes } from './routes/shelves';
 import { registerUserRoutes } from './routes/users';
@@ -85,6 +86,7 @@ registerShelfRoutes(app);
 registerBookRoutes(app);
 registerEpubRoutes(app);
 registerCbxRoutes(app);
+registerJournalRoutes(app);
 
 app.onError((err, c) => {
   if (err instanceof HttpError) {

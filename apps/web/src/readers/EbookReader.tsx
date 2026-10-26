@@ -5,6 +5,7 @@ import { InputNumber } from 'primereact/inputnumber';
 import { SelectButton } from 'primereact/selectbutton';
 import { Sidebar } from 'primereact/sidebar';
 import { Slider } from 'primereact/slider';
+import NoteDialog, { type NoteDraft } from '../components/NoteDialog';
 import { Tree, type TreeExpandedKeysType } from 'primereact/tree';
 import type { TreeNode } from 'primereact/treenode';
 import type { Book, EpubBookInfo } from '../api/types';
@@ -89,6 +90,9 @@ export default function EbookReader({ book }: { book: Book }) {
   const [toc, setToc] = useState<FoliateTocItem[]>([]);
   const [position, setPosition] = useState<PositionState>({ percentage: 0 });
   const [scrub, setScrub] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
+  // Last passage the reader selected in the book; offered as the quote for a new note.
+  const selectionRef = useRef('');
 
   /** Push theme/size/flow into the foliate renderer. */
   const applyStyles = useCallback(() => {
@@ -123,6 +127,7 @@ export default function EbookReader({ book }: { book: Book }) {
           ? Math.min(100, Math.max(0, Math.round(fraction * 1000) / 10))
           : undefined;
 
+      selectionRef.current = '';
       setPosition({
         cfi,
         percentage: percentage ?? 0,
@@ -145,7 +150,14 @@ export default function EbookReader({ book }: { book: Book }) {
 
         const onRelocate = (event: Event) =>
           handleRelocate((event as CustomEvent<FoliateRelocateDetail>).detail ?? {});
-        const onLoad = () => applyStylesRef.current();
+        const onLoad = (event: Event) => {
+          applyStylesRef.current();
+          const doc = (event as CustomEvent<{ doc?: Document }>).detail?.doc;
+          doc?.addEventListener('selectionchange', () => {
+            const text = doc.getSelection()?.toString().trim();
+            if (text) selectionRef.current = text.slice(0, 5000);
+          });
+        };
         view.addEventListener('relocate', onRelocate);
         view.addEventListener('load', onLoad);
 
@@ -244,6 +256,20 @@ export default function EbookReader({ book }: { book: Book }) {
         onBack={() => navigate(`/book/${book.id}`)}
         actions={
           <>
+            <ReaderIconButton
+              icon="pi-pencil"
+              title="Add note or highlight"
+              disabled={loading}
+              onClick={() =>
+                setNoteDraft({
+                  bookId: book.id,
+                  quote: selectionRef.current,
+                  location: position.cfi,
+                  chapter: position.chapter,
+                  percentage: position.percentage
+                })
+              }
+            />
             <ReaderIconButton
               icon="pi-list"
               title="Table of contents"
@@ -356,6 +382,16 @@ export default function EbookReader({ book }: { book: Book }) {
           </ReaderSetting>
         </div>
       </Sidebar>
+
+      <NoteDialog
+        visible={noteDraft !== null}
+        onHide={() => setNoteDraft(null)}
+        draft={noteDraft ?? undefined}
+        lockBook
+        onSaved={() => {
+          selectionRef.current = '';
+        }}
+      />
 
       <ReaderFooter>
         <ReaderIconButton

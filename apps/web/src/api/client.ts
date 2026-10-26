@@ -71,6 +71,8 @@ async function tryRefresh(): Promise<boolean> {
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
+  // Lets the server place reading activity on the reader's own calendar day.
+  headers.set('X-Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
   const token = tokenStore.access;
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {

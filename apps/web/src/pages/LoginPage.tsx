@@ -22,7 +22,7 @@ export default function LoginPage() {
   const sessionExpired = searchParams.get('reason') === 'session_expired';
 
   useEffect(() => {
-    if (user) navigate('/all-books', { replace: true });
+    if (user) navigate('/dashboard', { replace: true });
   }, [user, navigate]);
 
   const setupRequired = setupStatus?.setupRequired ?? false;
@@ -37,7 +37,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(username, password);
-      navigate('/all-books', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

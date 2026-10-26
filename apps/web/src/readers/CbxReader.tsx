@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import NoteDialog, { type NoteDraft } from '../components/NoteDialog';
 import { SelectButton } from 'primereact/selectbutton';
 import { Sidebar } from 'primereact/sidebar';
 import { Slider } from 'primereact/slider';
@@ -92,6 +93,7 @@ export default function CbxReader({ book }: { book: Book }) {
   const [pages, setPages] = useState<number[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState(() => book.cbxProgress?.page ?? 1);
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const total = pages?.length ?? 0;
@@ -236,12 +238,27 @@ export default function CbxReader({ book }: { book: Book }) {
         subtitle={settings.rtl ? 'Right-to-left' : undefined}
         onBack={() => navigate(`/book/${book.id}`)}
         actions={
-          <ReaderIconButton
-            icon="pi-cog"
-            title="Reader settings"
-            active={settingsOpen}
-            onClick={() => setSettingsOpen(open => !open)}
-          />
+          <>
+            <ReaderIconButton
+              icon="pi-pencil"
+              title="Add note"
+              disabled={!pages}
+              onClick={() =>
+                setNoteDraft({
+                  bookId: book.id,
+                  location: String(current),
+                  chapter: `Page ${current} of ${total}`,
+                  percentage: total > 0 ? pagePercentage(current, total) : undefined
+                })
+              }
+            />
+            <ReaderIconButton
+              icon="pi-cog"
+              title="Reader settings"
+              active={settingsOpen}
+              onClick={() => setSettingsOpen(open => !open)}
+            />
+          </>
         }
       />
 
@@ -313,6 +330,13 @@ export default function CbxReader({ book }: { book: Book }) {
           </ReaderSetting>
         </div>
       </Sidebar>
+
+      <NoteDialog
+        visible={noteDraft !== null}
+        onHide={() => setNoteDraft(null)}
+        draft={noteDraft ?? undefined}
+        lockBook
+      />
 
       <ReaderFooter>
         <ReaderIconButton

@@ -136,7 +136,7 @@ export function ReaderSetting({ label, children }: { label: string; children: Re
   );
 }
 
-/** True when a key event came from inside an open PrimeReact drawer. */
+/** True when a key event came from inside an open PrimeReact drawer or dialog. */
 export function isFromDrawer(event: KeyboardEvent): boolean {
-  return event.target instanceof Element && event.target.closest('.p-sidebar') !== null;
+  return event.target instanceof Element && event.target.closest('.p-sidebar, .p-dialog') !== null;
 }

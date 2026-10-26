@@ -1,4 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import DashboardPage from './pages/DashboardPage';
+import NotebookPage from './pages/NotebookPage';
+import NotesPage from './pages/NotesPage';
+import StreakPage from './pages/StreakPage';
 import { AuthProvider } from './auth/AuthContext';
 import RequireAuth from './auth/RequireAuth';
 import AppLayout from './layout/AppLayout';
@@ -18,7 +22,11 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/all-books" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/notes" element={<NotesPage />} />
+            <Route path="/notebook" element={<NotebookPage />} />
+            <Route path="/streak" element={<StreakPage />} />
             <Route path="/all-books" element={<BookBrowserPage />} />
             <Route path="/library/:libraryId/books" element={<BookBrowserPage />} />
             <Route path="/shelf/:shelfId/books" element={<BookBrowserPage />} />

@@ -7,6 +7,9 @@ import { Menu } from 'primereact/menu';
 import type { MenuItem } from 'primereact/menuitem';
 import { tip } from '../utils/tooltip';
 import { useBooks, useLibraries, useShelves } from '../hooks/useApi';
+import { useActivity, useNotes } from '../hooks/useJournal';
+import { computeStreaks } from '../utils/streak';
+import { todayKey } from '../utils/dates';
 
 interface MenuEntry {
   to: string;
@@ -59,6 +62,8 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
   const { data: books } = useBooks();
   const { data: libraries } = useLibraries();
   const { data: shelves } = useShelves();
+  const { data: notes } = useNotes();
+  const { data: activity } = useActivity();
 
   const sections = useMemo<MenuSectionData[]>(() => {
     const all = books ?? [];
@@ -72,9 +77,23 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
       {
         title: 'Home',
         entries: [
+          { to: '/dashboard', label: 'Dashboard', icon: 'pi pi-home' },
           { to: '/all-books', label: 'All Books', icon: 'pi pi-book', count: all.length },
           { to: '/series', label: 'Series', icon: 'pi pi-objects-column', count: series.size },
           { to: '/authors', label: 'Authors', icon: 'pi pi-users', count: authors.size, alsoMatches: ['/author/'] }
+        ]
+      },
+      {
+        title: 'Journal',
+        entries: [
+          { to: '/notes', label: 'Notes & Highlights', icon: 'pi pi-pencil', count: notes?.length ?? 0 },
+          { to: '/notebook', label: 'Notebook', icon: 'pi pi-file-edit' },
+          {
+            to: '/streak',
+            label: 'Reading Streak',
+            icon: 'pi pi-bolt',
+            count: computeStreaks(activity ?? {}, todayKey()).current
+          }
         ]
       },
       {
@@ -104,7 +123,7 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
         ]
       }
     ].filter(section => section.entries.length > 0);
-  }, [books, libraries, shelves]);
+  }, [books, libraries, shelves, notes, activity]);
 
   if (collapsed) {
     const railButton = (entry: MenuEntry) => {

@@ -3,6 +3,7 @@ import { hasPermission, requirePermission } from '../auth';
 import { AppEnv, canSeeLibrary } from '../context';
 import { BookDto, toBookDto } from '../dto';
 import { coverKey, fileKey } from '../store';
+import { recordReading, resolveTimeZone } from '../userData';
 import {
   BOOK_EXTENSIONS,
   BookRecord,
@@ -253,6 +254,18 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
       record.lastReadTime = now;
       return record;
     });
+
+    // Feed the reading-streak calendar. Never let a journal failure lose the progress save.
+    try {
+      const percentage = (epubProgress ?? pdfProgress ?? cbxProgress)!.percentage;
+      const timeZone = resolveTimeZone(
+        c.req.header('X-Timezone'),
+        (c.req.raw as { cf?: { timezone?: string } }).cf?.timezone
+      );
+      await recordReading(c.env.Library, user.id, bookId, percentage, timeZone);
+    } catch (error) {
+      console.error('Could not record reading activity:', error);
+    }
 
     const { index } = await store.read();
     return c.json(buildBook(index, updated));

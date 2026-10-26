@@ -1,23 +1,27 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Avatar } from 'primereact/avatar';
 import { Button } from 'primereact/button';
 import { Checkbox } from 'primereact/checkbox';
-import { Column } from 'primereact/column';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
-import { DataTable } from 'primereact/datatable';
 import { Dialog } from 'primereact/dialog';
 import { Divider } from 'primereact/divider';
 import { InputText } from 'primereact/inputtext';
 import { Message } from 'primereact/message';
 import { Password } from 'primereact/password';
+import { SelectButton } from 'primereact/selectbutton';
 import { TabView, TabPanel } from 'primereact/tabview';
+import { Tag } from 'primereact/tag';
 import { Toast } from 'primereact/toast';
 import { api } from '../api/client';
 import type { Library, Permissions, Shelf, User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { tip } from '../utils/tooltip';
 import FormField from '../components/FormField';
+import ListRow from '../components/ListRow';
 import PageHeader from '../components/PageHeader';
+import SectionCard from '../components/SectionCard';
+import { useTheme } from '../theme/ThemeContext';
 import { queryKeys, useLibraries, useShelves, useUsers } from '../hooks/useApi';
 
 function useToast() {
@@ -114,29 +118,25 @@ function LibrariesTab() {
         title="Libraries"
         action={canManage && <Button label="New Library" icon="pi pi-plus" size="small" onClick={openCreate} />}
       />
-      <DataTable value={libraries ?? []} size="small" stripedRows emptyMessage="No libraries yet">
-        <Column field="name" header="Name" />
-        <Column field="bookCount" header="Books" style={{ width: '6rem' }} />
-        {canManage && (
-          <Column
-            header=""
-            style={{ width: '9rem' }}
-            body={library => (
-              <div className="flex gap-1">
-                <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(library)} {...tip('Edit')} />
-                <Button
-                  icon="pi pi-trash"
-                  text
-                  size="small"
-                  severity="danger"
-                  onClick={() => remove(library)}
-                  {...tip('Delete')}
-                />
-              </div>
-            )}
+      <div className="flex flex-column">
+        {(libraries ?? []).length === 0 && <p className="text-color-secondary">No libraries yet.</p>}
+        {(libraries ?? []).map(library => (
+          <ListRow
+            key={library.id}
+            icon="pi-folder"
+            title={library.name}
+            subtitle={`${library.bookCount ?? 0} ${library.bookCount === 1 ? 'book' : 'books'}`}
+            actions={
+              canManage ? (
+                <>
+                  <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${library.name}`} onClick={() => openEdit(library)} {...tip('Edit')} />
+                  <Button icon="pi pi-trash" text rounded severity="danger" aria-label={`Delete ${library.name}`} onClick={() => remove(library)} {...tip('Delete')} />
+                </>
+              ) : undefined
+            }
           />
-        )}
-      </DataTable>
+        ))}
+      </div>
 
       <Dialog
         visible={dialogOpen}
@@ -234,33 +234,33 @@ function ShelvesTab() {
       {node}
       <ConfirmDialog />
       <TabHeader title="Shelves" action={<Button label="New Shelf" icon="pi pi-plus" size="small" onClick={openCreate} />} />
-      <DataTable value={shelves ?? []} size="small" stripedRows emptyMessage="No shelves yet">
-        <Column field="name" header="Name" />
-        <Column field="bookCount" header="Books" style={{ width: '6rem' }} />
-        <Column
-          header="Visibility"
-          style={{ width: '8rem' }}
-          body={shelf => (shelf.publicShelf ? 'Public' : 'Private')}
-        />
-        <Column
-          header=""
-          style={{ width: '9rem' }}
-          body={shelf => (
-            <div className="flex gap-1">
-              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(shelf)} {...tip('Edit')} />
-              <Button
-                icon="pi pi-trash"
-                text
-                size="small"
-                severity="danger"
-                onClick={() => remove(shelf)}
-                {...tip('Delete')}
-                disabled={Boolean(shelf.userId && shelf.userId !== user?.id && !user?.permissions.admin)}
-              />
-            </div>
-          )}
-        />
-      </DataTable>
+      <div className="flex flex-column">
+        {(shelves ?? []).length === 0 && <p className="text-color-secondary">No shelves yet.</p>}
+        {(shelves ?? []).map(shelf => (
+          <ListRow
+            key={shelf.id}
+            icon="pi-bookmark"
+            title={shelf.name}
+            subtitle={`${shelf.bookCount ?? 0} ${shelf.bookCount === 1 ? 'book' : 'books'}`}
+            meta={<Tag value={shelf.publicShelf ? 'Public' : 'Private'} severity={shelf.publicShelf ? 'info' : 'secondary'} />}
+            actions={
+              <>
+                <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${shelf.name}`} onClick={() => openEdit(shelf)} {...tip('Edit')} />
+                <Button
+                  icon="pi pi-trash"
+                  text
+                  rounded
+                  severity="danger"
+                  aria-label={`Delete ${shelf.name}`}
+                  onClick={() => remove(shelf)}
+                  {...tip('Delete')}
+                  disabled={Boolean(shelf.userId && shelf.userId !== user?.id && !user?.permissions.admin)}
+                />
+              </>
+            }
+          />
+        ))}
+      </div>
 
       <Dialog
         visible={dialogOpen}
@@ -406,47 +406,55 @@ function UsersTab() {
       {node}
       <ConfirmDialog />
       <TabHeader title="Users" action={<Button label="New User" icon="pi pi-plus" size="small" onClick={openCreate} />} />
-      <DataTable value={users ?? []} size="small" stripedRows emptyMessage="No users">
-        <Column field="username" header="Username" />
-        <Column field="name" header="Name" />
-        <Column field="email" header="Email" />
-        <Column
-          header="Permissions"
-          body={target =>
-            PERMISSION_LABELS.filter(label => target.permissions[label.key])
-              .map(label => label.label)
-              .join(', ') || '—'
-          }
-        />
-        <Column
-          header=""
-          style={{ width: '11rem' }}
-          body={target => (
-            <div className="flex gap-1">
-              <Button icon="pi pi-pencil" text size="small" onClick={() => openEdit(target)} {...tip('Edit')} />
-              <Button
-                icon="pi pi-key"
-                text
-                size="small"
-                onClick={() => {
-                  setPasswordReset(target);
-                  setNewPassword('');
-                }}
-                {...tip('Reset password')}
-              />
-              <Button
-                icon="pi pi-trash"
-                text
-                size="small"
-                severity="danger"
-                onClick={() => remove(target)}
-                {...tip('Delete')}
-                disabled={target.id === user.id}
-              />
-            </div>
-          )}
-        />
-      </DataTable>
+      <div className="flex flex-column">
+        {(users ?? []).length === 0 && <p className="text-color-secondary">No users.</p>}
+        {(users ?? []).map(target => (
+          <ListRow
+            key={target.id}
+            leading={<Avatar label={(target.name || target.username).charAt(0).toUpperCase()} shape="circle" className="flex-shrink-0" />}
+            title={target.name || target.username}
+            subtitle={`@${target.username} · ${target.email}`}
+            meta={
+              target.permissions.admin ? (
+                <Tag value="Admin" severity="warning" />
+              ) : PERMISSION_LABELS.filter(label => target.permissions[label.key]).length > 0 ? (
+                PERMISSION_LABELS.filter(label => target.permissions[label.key]).map(label => (
+                  <Tag key={label.key} value={label.label} severity="secondary" />
+                ))
+              ) : (
+                <span className="text-xs text-color-secondary">No permissions</span>
+              )
+            }
+            actions={
+              <>
+                <Button icon="pi pi-pencil" text rounded severity="secondary" aria-label={`Edit ${target.username}`} onClick={() => openEdit(target)} {...tip('Edit')} />
+                <Button
+                  icon="pi pi-key"
+                  text
+                  rounded
+                  severity="secondary"
+                  aria-label={`Reset password for ${target.username}`}
+                  onClick={() => {
+                    setPasswordReset(target);
+                    setNewPassword('');
+                  }}
+                  {...tip('Reset password')}
+                />
+                <Button
+                  icon="pi pi-trash"
+                  text
+                  rounded
+                  severity="danger"
+                  aria-label={`Delete ${target.username}`}
+                  onClick={() => remove(target)}
+                  {...tip('Delete')}
+                  disabled={target.id === user.id}
+                />
+              </>
+            }
+          />
+        ))}
+      </div>
 
       <Dialog
         visible={dialogOpen}
@@ -555,6 +563,7 @@ function UsersTab() {
 function AccountTab() {
   const toast = useRef<Toast>(null);
   const { logoutAll } = useAuth();
+  const { mode, setMode } = useTheme();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -596,8 +605,10 @@ function AccountTab() {
   return (
     <div>
       <Toast ref={toast} />
-      <TabHeader title="Account" />
-      <form onSubmit={submitPassword} className="flex flex-column gap-3" style={{ maxWidth: '26rem' }}>
+<div className="grid">
+        <div className="col-12 lg:col-6">
+          <SectionCard title="Change password" icon="pi-key">
+            <form onSubmit={submitPassword} className="flex flex-column gap-3">
         <FormField label="Current Password" htmlFor="settings-current-password">
           <Password
             inputId="settings-current-password"
@@ -638,8 +649,28 @@ function AccountTab() {
         {error && <Message severity="error" text={error} className={FORM_MESSAGE_CLASS} />}
         <Button label="Change Password" type="submit" loading={submitting} className="mt-2" />
       </form>
-      <Divider />
-      <Button label="Logout everywhere" icon="pi pi-power-off" severity="danger" outlined onClick={clearSession} />
+          </SectionCard>
+        </div>
+        <div className="col-12 lg:col-6 flex flex-column gap-3">
+          <SectionCard title="Appearance" icon="pi-palette">
+            <p className="mt-0 mb-3 text-sm text-color-secondary">Also available from the user menu in the top bar.</p>
+            <SelectButton
+              value={mode}
+              options={[
+                { label: 'Light', value: 'light' },
+                { label: 'Dark', value: 'dark' }
+              ]}
+              allowEmpty={false}
+              onChange={event => setMode(event.value as 'light' | 'dark')}
+              aria-label="Theme"
+            />
+          </SectionCard>
+          <SectionCard title="Sessions" icon="pi-shield">
+            <p className="mt-0 mb-3 text-sm text-color-secondary">Sign out of this and every other device where you are logged in.</p>
+            <Button label="Logout everywhere" icon="pi pi-power-off" severity="danger" outlined onClick={clearSession} />
+          </SectionCard>
+        </div>
+      </div>
     </div>
   );
 }
@@ -650,7 +681,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-column gap-3" style={{ maxWidth: '68rem' }}>
       <PageHeader title="Settings" />
-      <TabView>
+      <TabView scrollable>
         <TabPanel header="Libraries" leftIcon="pi pi-folder mr-2">
           <LibrariesTab />
         </TabPanel>
