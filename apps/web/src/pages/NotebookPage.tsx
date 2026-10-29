@@ -1,18 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from 'primereact/button';
 import { Calendar } from 'primereact/calendar';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { SelectButton } from 'primereact/selectbutton';
 import { Tag } from 'primereact/tag';
+import { api } from '../api/client';
 import type { Mood } from '../api/journal';
+import DayBookNotes from '../components/DayBookNotes';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { LoadingState } from '../components/States';
 import TodoList from '../components/TodoList';
 import { useBooks } from '../hooks/useApi';
-import { useActivity, useNotebookDay, useNotebookMonth } from '../hooks/useJournal';
+import { useActivity, useNotebookDay, useNotebookEntry, useNotebookMonth } from '../hooks/useJournal';
 import { addDays, dateKey, formatDuration, formatLongDate, monthKey, parseDateKey, todayKey } from '../utils/dates';
+import { saveBlob } from '../utils/download';
 
 const MOODS: { label: string; value: Mood }[] = [
   { label: 'Great', value: 'great' },
@@ -76,7 +79,21 @@ export default function NotebookPage() {
   const { entry, update, status, isLoading } = useNotebookDay(date);
   const monthData = useNotebookMonth(monthKey(date));
   const previousDay = addDays(date, -1);
-  const previous = useNotebookMonth(monthKey(previousDay)).data?.days[previousDay];
+  const previous = useNotebookEntry(previousDay).data;
+  const [downloadError, setDownloadError] = useState(false);
+
+  const downloadMarkdown = async () => {
+    setDownloadError(false);
+    try {
+      // Make sure the latest edits are on the server before exporting.
+      await new Promise(resolve => setTimeout(resolve, 900));
+      const blob = await api.blob(`/api/v1/notebook/${date}/markdown`);
+      const [y, m, d] = date.split('-');
+      saveBlob(blob, `${d}-${m}-${y}.md`);
+    } catch {
+      setDownloadError(true);
+    }
+  };
 
   const carryable = useMemo(() => {
     const existing = new Set(entry.todos.map(t => t.text.toLowerCase()));
@@ -102,7 +119,18 @@ export default function NotebookPage() {
         />
         <Button icon="pi pi-chevron-right" text rounded severity="secondary" aria-label="Next day" onClick={() => goTo(addDays(date, 1))} />
         {date !== today && <Button label="Today" size="small" outlined onClick={() => goTo(today)} />}
+        <Button
+          icon="pi pi-download"
+          text
+          rounded
+          severity="secondary"
+          aria-label="Download this day as Markdown"
+          tooltip="Download .md"
+          tooltipOptions={{ position: 'bottom' }}
+          onClick={() => void downloadMarkdown()}
+        />
       </PageHeader>
+      {downloadError && <small className="text-red-500">Nothing to download yet. Write something for this day first.</small>}
 
       {isLoading ? (
         <LoadingState />
@@ -147,6 +175,8 @@ export default function NotebookPage() {
               </div>
             </SectionCard>
 
+            <DayBookNotes date={date} entry={entry} onChange={bookNotes => update({ bookNotes })} />
+
             <SectionCard title="Thoughts & learnings" icon="pi-lightbulb">
               <InputTextarea
                 value={entry.thoughts}
@@ -162,7 +192,7 @@ export default function NotebookPage() {
           </div>
 
           <div className="col-12 lg:col-5 flex flex-column gap-3">
-            <SectionCard title="Today’s reading progress" icon="pi-chart-line">
+            <SectionCard title={date === today ? 'Today’s reading progress' : 'Reading that day'} icon="pi-chart-line">
               <DayReading date={date} />
             </SectionCard>
 
@@ -182,7 +212,7 @@ export default function NotebookPage() {
                         {parseDateKey(day.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                       </span>
                       <span className="flex align-items-center gap-2 text-xs text-color-secondary">
-                        {day.todos.length > 0 && `${day.todos.filter(t => t.done).length}/${day.todos.length} done`}
+                        {day.todos > 0 && `${day.done}/${day.todos} done`}
                         {day.mood && <Tag value={day.mood} severity={MOOD_SEVERITY[day.mood]} />}
                       </span>
                     </button>

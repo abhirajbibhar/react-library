@@ -12,6 +12,8 @@ export interface Note {
   location?: string;
   chapter?: string;
   percentage?: number;
+  /** Set when the note was imported from a PDF annotation. */
+  source?: { kind: 'pdf'; annotationId: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -35,18 +37,36 @@ export interface TodoItem {
   done: boolean;
 }
 
+/** A remark about one book on one day. */
+export interface BookNote {
+  bookId: number;
+  title: string;
+  text: string;
+}
+
 export interface NotebookEntry {
   date: string;
   todos: TodoItem[];
   mood: Mood | null;
   reflection: string;
   thoughts: string;
+  bookNotes: BookNote[];
   updatedAt: string;
+}
+
+/** What the month list carries per day: enough for the history list, no file reads. */
+export interface NotebookSummary {
+  date: string;
+  todos: number;
+  done: number;
+  mood: Mood | null;
+  books: number;
+  hasText: boolean;
 }
 
 export interface NotebookMonth {
   month: string;
-  days: Record<string, NotebookEntry>;
+  days: Record<string, NotebookSummary>;
 }
 
 export interface BookDayActivity {

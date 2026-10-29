@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from 'primereact/button';
 import { bookProgressPercent } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -7,12 +7,11 @@ import BookCard from '../components/BookCard';
 import BookRow from '../components/BookRow';
 import QuoteCard from '../components/QuoteCard';
 import SectionCard from '../components/SectionCard';
-import StreakCard, { Stat } from '../components/StreakCard';
 import { EmptyState, LoadingState } from '../components/States';
 import TodayPlanCard from '../components/TodayPlanCard';
 import { useBooks } from '../hooks/useApi';
 import { useActivity } from '../hooks/useJournal';
-import { formatDuration, formatLongDate, greeting, todayKey } from '../utils/dates';
+import { formatLongDate, greeting, todayKey } from '../utils/dates';
 import { computeStreaks } from '../utils/streak';
 
 export default function DashboardPage() {
@@ -23,8 +22,6 @@ export default function DashboardPage() {
   const today = todayKey();
 
   const stats = useMemo(() => computeStreaks(activity ?? {}, today), [activity, today]);
-  const todaySeconds = activity?.[today]?.seconds ?? 0;
-  const todayBooks = Object.keys(activity?.[today]?.books ?? {}).length;
 
   const continueReading = useMemo(
     () =>
@@ -38,7 +35,6 @@ export default function DashboardPage() {
     () => [...(books ?? [])].sort((a, b) => b.addedOn.localeCompare(a.addedOn)).slice(0, 12),
     [books]
   );
-  const readingNow = (books ?? []).filter(b => b.readStatus === 'READING' || b.readStatus === 'RE_READING').length;
 
   const name = (user?.name || user?.username || '').split(' ')[0];
 
@@ -50,27 +46,16 @@ export default function DashboardPage() {
             {greeting(new Date().getHours())}
             {name ? `, ${name}` : ''}
           </h1>
-          <p className="m-0 mb-4 text-color-secondary">
+          <p className="m-0 text-color-secondary">
             {stats.readToday
               ? 'Nice work, you have read today. Keep it going.'
               : stats.current > 0
-                ? `You are on a ${stats.current}-day streak. A few pages today keeps it alive.`
-                : 'A few pages today is a great place to begin.'}
+                ? 'A few pages today keeps your streak alive.'
+                : 'A few pages today is a great place to begin.'}{' '}
+            <Link to="/streak" className="no-underline text-primary white-space-nowrap">
+              See your streak
+            </Link>
           </p>
-          <div className="grid">
-            <div className="col-6 md:col-3">
-              <Stat label="Read today" value={formatDuration(todaySeconds)} icon="pi-clock" />
-            </div>
-            <div className="col-6 md:col-3">
-              <Stat label="Books today" value={todayBooks} icon="pi-book" />
-            </div>
-            <div className="col-6 md:col-3">
-              <Stat label="Streak" value={`${stats.current}d`} icon="pi-bolt" />
-            </div>
-            <div className="col-6 md:col-3">
-              <Stat label="Reading now" value={readingNow} icon="pi-bookmark" />
-            </div>
-          </div>
         </SectionCard>
       </div>
       <div className="col-12 lg:col-4">
@@ -96,7 +81,7 @@ export default function DashboardPage() {
         <TodayPlanCard />
       </div>
 
-      <div className="col-12 lg:col-8">
+      <div className="col-12">
         <SectionCard
           className="h-full"
           title="Recently added"
@@ -115,9 +100,6 @@ export default function DashboardPage() {
             </BookRow>
           )}
         </SectionCard>
-      </div>
-      <div className="col-12 lg:col-4">
-        <StreakCard className="h-full" />
       </div>
     </div>
   );

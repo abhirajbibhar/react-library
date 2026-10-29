@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PDFViewer,
   type PDFViewerConfig,
   type PluginRegistry,
   type ScrollPlugin
 } from '@embedpdf/react-pdf-viewer';
+import { Tag } from 'primereact/tag';
 import { fileUrl, type Book } from '../api/types';
 import { tokenStore } from '../api/client';
+import { attachAnnotationSync, type SyncStatus } from './annotationController';
 import { useProgressSaver } from './progress';
 import { clampPage, pagePercentage } from './readerUtils';
 import wasmUrl from './pdfiumWasm';
@@ -21,6 +23,22 @@ export default function PdfReader({ book }: { book: Book }) {
   const saver = useProgressSaver(book.id);
   const { mode } = useTheme();
   const startPage = book.pdfProgress?.page ?? 1;
+
+  // Highlights and notes are saved beside the book as `<file name>.annotation.json`.
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const detach = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      detach.current?.();
+      detach.current = null;
+    },
+    []
+  );
+  useEffect(() => {
+    if (syncStatus !== 'saved') return;
+    const t = window.setTimeout(() => setSyncStatus('idle'), 2500);
+    return () => window.clearTimeout(t);
+  }, [syncStatus]);
 
   // The config object is read once when the viewer mounts. PdfReader is keyed
   // by book id (see ReaderPage), so a new book always gets a fresh viewer.
@@ -62,6 +80,9 @@ export default function PdfReader({ book }: { book: Book }) {
   }, [book.id]);
 
   const handleReady = (registry: PluginRegistry) => {
+    detach.current?.();
+    detach.current = attachAnnotationSync(registry, book.id, setSyncStatus);
+
     const scroll = registry.getPlugin<ScrollPlugin>('scroll')?.provides();
     if (!scroll) return;
 
@@ -84,7 +105,18 @@ export default function PdfReader({ book }: { book: Book }) {
   };
 
   return (
-    <div className="flex flex-column flex-1 min-h-0 surface-card">
+    <div className="flex flex-column flex-1 min-h-0 surface-card relative">
+      {syncStatus !== 'idle' && (
+        <div className="absolute" style={{ right: 12, bottom: 12, zIndex: 20, pointerEvents: 'none' }} role="status" aria-live="polite">
+          <Tag
+            icon={syncStatus === 'saved' ? 'pi pi-check' : syncStatus === 'error' ? 'pi pi-exclamation-triangle' : 'pi pi-spin pi-spinner'}
+            severity={syncStatus === 'error' ? 'danger' : syncStatus === 'saved' ? 'success' : 'info'}
+            value={
+              syncStatus === 'saved' ? 'Annotations saved' : syncStatus === 'error' ? 'Annotations not saved' : syncStatus === 'loading' ? 'Loading annotations' : 'Saving annotations'
+            }
+          />
+        </div>
+      )}
       <PDFViewer config={config} style={{ width: '100%', height: '100%', flex: '1 1 auto', minHeight: 0 }} onReady={handleReady} />
     </div>
   );

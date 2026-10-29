@@ -9,6 +9,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8787',
         changeOrigin: true
+      },
+      // Cover images are served by the worker (see run_worker_first in wrangler.jsonc).
+      '/public': {
+        target: 'http://localhost:8787',
+        changeOrigin: true
       }
     }
   },

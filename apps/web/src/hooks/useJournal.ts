@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { ActivityDays, Note, NoteInput, NotebookEntry, NotebookMonth } from '../api/journal';
+import type { ActivityDays, Note, NoteInput, NotebookEntry, NotebookMonth, NotebookSummary } from '../api/journal';
 
 export const journalKeys = {
   notes: ['notes'] as const,
   activity: ['activity'] as const,
-  notebook: (month: string) => ['notebook', month] as const
+  notebook: (month: string) => ['notebook', month] as const,
+  notebookDay: (date: string) => ['notebook-day', date] as const
 };
 
 /* --------------------------------- notes --------------------------------- */
@@ -43,6 +44,16 @@ export function useDeleteNote() {
   });
 }
 
+/** Pull highlights and notes from PDF annotation files into Notes. One book, or every annotated book. */
+export function useImportAnnotations() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookId?: number) =>
+      api.post<{ imported: number; skipped: number; books: number }>('/api/v1/notes/import-annotations', bookId ? { bookId } : {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: journalKeys.notes })
+  });
+}
+
 /* -------------------------------- activity -------------------------------- */
 
 export function useActivity() {
@@ -55,10 +66,20 @@ export function useActivity() {
 
 /* -------------------------------- notebook -------------------------------- */
 
+/** Days that have a note in a month (summaries only). */
 export function useNotebookMonth(month: string) {
   return useQuery({
     queryKey: journalKeys.notebook(month),
     queryFn: () => api.get<NotebookMonth>(`/api/v1/notebook?month=${month}`),
+    staleTime: 60_000
+  });
+}
+
+/** One day's full entry, read-only. */
+export function useNotebookEntry(date: string) {
+  return useQuery({
+    queryKey: journalKeys.notebookDay(date),
+    queryFn: () => api.get<NotebookEntry>(`/api/v1/notebook/${date}`),
     staleTime: 60_000
   });
 }
@@ -69,8 +90,27 @@ export const emptyEntry = (date: string): NotebookEntry => ({
   mood: null,
   reflection: '',
   thoughts: '',
+  bookNotes: [],
   updatedAt: ''
 });
+
+export function summarizeEntry(entry: NotebookEntry): NotebookSummary {
+  return {
+    date: entry.date,
+    todos: entry.todos.length,
+    done: entry.todos.filter(t => t.done).length,
+    mood: entry.mood,
+    books: entry.bookNotes.filter(n => n.text.trim()).length,
+    hasText: Boolean(entry.reflection.trim() || entry.thoughts.trim())
+  };
+}
+
+const isBlank = (entry: NotebookEntry) =>
+  entry.todos.length === 0 &&
+  !entry.mood &&
+  !entry.reflection.trim() &&
+  !entry.thoughts.trim() &&
+  entry.bookNotes.every(n => !n.text.trim());
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type EntryPatch = Partial<Omit<NotebookEntry, 'date' | 'updatedAt'>>;
@@ -83,12 +123,19 @@ type EntryPatch = Partial<Omit<NotebookEntry, 'date' | 'updatedAt'>>;
 export function useNotebookDay(date: string) {
   const month = date.slice(0, 7);
   const queryClient = useQueryClient();
-  const query = useNotebookMonth(month);
-  const [status, setStatus] = useState<SaveStatus>('idle');
   const timer = useRef<number | undefined>(undefined);
   const pending = useRef<NotebookEntry | null>(null);
+  const [status, setStatus] = useState<SaveStatus>('idle');
 
-  const entry = query.data?.days[date] ?? emptyEntry(date);
+  const query = useQuery({
+    queryKey: journalKeys.notebookDay(date),
+    queryFn: () => api.get<NotebookEntry>(`/api/v1/notebook/${date}`),
+    staleTime: 60_000,
+    // A background refetch must never overwrite text that has not been saved yet.
+    refetchOnWindowFocus: () => !pending.current
+  });
+
+  const entry = query.data ?? emptyEntry(date);
 
   const flush = useCallback(async () => {
     window.clearTimeout(timer.current);
@@ -106,13 +153,18 @@ export function useNotebookDay(date: string) {
 
   const update = useCallback(
     (patch: EntryPatch) => {
-      const key = journalKeys.notebook(month);
-      const current = queryClient.getQueryData<NotebookMonth>(key)?.days[date] ?? emptyEntry(date);
+      const current = queryClient.getQueryData<NotebookEntry>(journalKeys.notebookDay(date)) ?? emptyEntry(date);
       const next: NotebookEntry = { ...current, ...patch, updatedAt: new Date().toISOString() };
-      queryClient.setQueryData<NotebookMonth>(key, old => ({
-        month,
-        days: { ...(old?.days ?? {}), [date]: next }
-      }));
+      queryClient.setQueryData(journalKeys.notebookDay(date), next);
+
+      // Keep the month's history list in step without refetching it.
+      queryClient.setQueryData<NotebookMonth>(journalKeys.notebook(month), old => {
+        const days = { ...(old?.days ?? {}) };
+        if (isBlank(next)) delete days[date];
+        else days[date] = summarizeEntry(next);
+        return { month, days };
+      });
+
       pending.current = next;
       setStatus('saving');
       window.clearTimeout(timer.current);

@@ -5,3 +5,6 @@ dist/
 *.log
 .DS_Store
 apps/worker/data
+.env
+.env.*
+*.tsbuildinfo

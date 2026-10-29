@@ -52,6 +52,8 @@ export interface NoteRecord {
   chapter?: string;
   /** 0-100 position in the book when the note was made. */
   percentage?: number;
+  /** Set when the note was imported from a PDF annotation (dedup key). */
+  source?: { kind: 'pdf'; annotationId: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +61,31 @@ export interface NoteRecord {
 export interface NotesDoc {
   nextId: number;
   items: NoteRecord[];
+  /** Import keys of notes the reader deleted, so re-importing doesn't bring them back. */
+  dismissed?: string[];
+}
+
+export const sourceKey = (bookId: number, annotationId: string) => `pdf:${bookId}:${annotationId}`;
+
+export interface QuoteRecord {
+  id: number;
+  text: string;
+  author: string;
+  /** Free-text origin (book title, article, speech…). */
+  source: string;
+  bookId?: number;
+  location?: string;
+  tags: string[];
+  favorite: boolean;
+  origin: 'manual' | 'note';
+  noteId?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotesDoc {
+  nextId: number;
+  items: QuoteRecord[];
 }
 
 export type Mood = 'great' | 'good' | 'okay' | 'low';
@@ -70,19 +97,21 @@ export interface TodoItem {
   done: boolean;
 }
 
-export interface NotebookEntry {
+/**
+ * Pre-Markdown notebook format (one JSON doc per month). Only read, to migrate
+ * old entries into per-day `.md` files — see notebookStore.ts.
+ */
+export interface LegacyNotebookEntry {
   date: string;
   todos: TodoItem[];
   mood: Mood | null;
-  /** "How was my reading today?" */
   reflection: string;
-  /** Free-form thoughts and learnings. */
   thoughts: string;
   updatedAt: string;
 }
 
-export interface NotebookMonthDoc {
-  days: Record<string, NotebookEntry>;
+export interface LegacyNotebookMonthDoc {
+  days: Record<string, LegacyNotebookEntry>;
 }
 
 export interface BookDayActivity {
@@ -107,10 +136,11 @@ export interface ActivityDoc {
 const base = (userId: number) => `data/users/${userId}`;
 export const notesDoc = (bucket: R2Bucket, userId: number) =>
   new JsonDoc<NotesDoc>(bucket, `${base(userId)}/notes.json`, () => ({ nextId: 1, items: [] }));
+export const quotesDoc = (bucket: R2Bucket, userId: number) =>
+  new JsonDoc<QuotesDoc>(bucket, `${base(userId)}/quotes.json`, () => ({ nextId: 1, items: [] }));
 export const activityDoc = (bucket: R2Bucket, userId: number) =>
   new JsonDoc<ActivityDoc>(bucket, `${base(userId)}/activity.json`, () => ({ days: {} }));
-export const notebookMonthDoc = (bucket: R2Bucket, userId: number, month: string) =>
-  new JsonDoc<NotebookMonthDoc>(bucket, `${base(userId)}/notebook/${month}.json`, () => ({ days: {} }));
+export const legacyNotebookKey = (userId: number, month: string) => `${base(userId)}/notebook/${month}.json`;
 
 /** Resolve a usable IANA time zone from the client header, then Cloudflare's guess. */
 export function resolveTimeZone(...candidates: (string | undefined | null)[]): string {

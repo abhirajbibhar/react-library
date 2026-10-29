@@ -97,6 +97,8 @@ export interface Book {
   epubProgress?: { cfi: string; percentage: number };
   pdfProgress?: { page: number; percentage: number };
   cbxProgress?: { page: number; percentage: number };
+  /** Highlights and notes saved in the PDF annotation file (absent = none). */
+  annotationCount?: number;
 }
 
 export interface BookDeletionResponse {
@@ -174,10 +176,13 @@ export interface ReadingProgressUpdate {
  * bytes.
  */
 export const coverUrl = (book: Pick<Book, 'id' | 'coverUpdatedOn' | 'coverExt'>): string => {
-  if (!book.coverUpdatedOn || !book.coverExt) return '';
+  // No cover recorded at all.
+  if (!book.coverUpdatedOn && !book.coverExt) return '';
   const params = new URLSearchParams();
-  params.set('t', book.coverUpdatedOn);
-  params.set('ext', book.coverExt);
+  // Records created before `coverExt` existed only ever stored jpg covers, and
+  // the worker defaults to jpg too, so mirror that instead of hiding the cover.
+  if (book.coverUpdatedOn) params.set('t', book.coverUpdatedOn);
+  params.set('ext', book.coverExt ?? 'jpg');
   return `/public/covers/${book.id}?${params.toString()}`;
 };
 

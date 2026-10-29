@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import app from '../src/index';
+import wranglerConfig from '../wrangler.jsonc?raw';
 import { MockR2Bucket, asBucket } from './mock-r2';
 
 interface TestEnv {
@@ -477,6 +478,83 @@ describe('public cover route', () => {
   it('404s for unknown books and invalid ids', async () => {
     expect((await request('/public/covers/999?ext=jpg')).status).toBe(404);
     expect((await request('/public/covers/abc')).status).toBe(404);
+  });
+});
+
+describe('cover wiring', () => {
+  it('routes /public/* to the worker (otherwise the SPA fallback answers cover requests)', () => {
+    const config = JSON.parse(wranglerConfig) as { assets: { run_worker_first: string[] } };
+    expect(config.assets.run_worker_first).toContain('/api/*');
+    expect(config.assets.run_worker_first).toContain('/public/*');
+  });
+
+  async function uploadPlain(token: string) {
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array([1, 2, 3])], 'Dune.pdf', { type: 'application/pdf' }));
+    form.set('libraryId', '1');
+    const res = await request('/api/v1/files/upload', { method: 'POST', body: form, token });
+    return (await res.json()) as { id: number };
+  }
+
+  it('rescan links covers that are in the bucket but missing from the index', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const book = await uploadPlain(token);
+    const other = await uploadPlain(token);
+    await bucket.put(`files/${book.id}/cover.png`, new Uint8Array([1]));
+
+    const before = (await (await request(`/api/v1/books/${book.id}`, { token })).json()) as { coverExt?: string };
+    expect(before.coverExt).toBeUndefined();
+
+    const res = await request('/api/v1/books/covers/rescan', { method: 'POST', token });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ covers: 1, fixed: 1, fixedIds: [book.id] });
+
+    const after = (await (await request(`/api/v1/books/${book.id}`, { token })).json()) as {
+      coverExt?: string;
+      coverUpdatedOn?: string;
+    };
+    expect(after.coverExt).toBe('png');
+    expect(after.coverUpdatedOn).toBeTruthy();
+
+    // Books with no cover object stay untouched; a second run is a no-op.
+    const untouched = (await (await request(`/api/v1/books/${other.id}`, { token })).json()) as { coverExt?: string };
+    expect(untouched.coverExt).toBeUndefined();
+    const again = await (await request('/api/v1/books/covers/rescan', { method: 'POST', token })).json();
+    expect(again).toMatchObject({ fixed: 0 });
+  });
+
+  it('rescan corrects a wrong recorded extension', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array([1, 2, 3])], 'Dune.pdf', { type: 'application/pdf' }));
+    form.set('libraryId', '1');
+    form.set('cover', new File([new Uint8Array([0xff, 0xd8])], 'cover.jpg', { type: 'image/jpeg' }));
+    const created = (await (await request('/api/v1/files/upload', { method: 'POST', body: form, token })).json()) as {
+      id: number;
+      coverExt?: string;
+    };
+    expect(created.coverExt).toBe('jpg');
+
+    // The bucket now holds a webp cover instead; the index still says jpg.
+    await bucket.delete(`files/${created.id}/cover.jpg`);
+    await bucket.put(`files/${created.id}/cover.webp`, new Uint8Array([1]));
+    await request('/api/v1/books/covers/rescan', { method: 'POST', token });
+
+    const record = (await (await request(`/api/v1/books/${created.id}`, { token })).json()) as { coverExt?: string };
+    expect(record.coverExt).toBe('webp');
+  });
+
+  it('rescan needs library-management rights', async () => {
+    const token = await login(ADMIN_USER, ADMIN_PASSWORD);
+    await request('/api/v1/users', {
+      method: 'POST',
+      token,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'reader', name: 'Reader', email: 'r@e.com', password: 'password123' })
+    });
+    const readerToken = await login('reader', 'password123');
+    const denied = await request('/api/v1/books/covers/rescan', { method: 'POST', token: readerToken });
+    expect(denied.status).toBe(403);
   });
 });
 

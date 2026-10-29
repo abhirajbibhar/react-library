@@ -43,6 +43,25 @@ function LibrariesSection() {
   const [editing, setEditing] = useState<Library | null>(null);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
+
+  const rescanCovers = async () => {
+    setRescanning(true);
+    try {
+      const result = await api.post<{ covers: number; fixed: number }>('/api/v1/books/covers/rescan');
+      await queryClient.invalidateQueries({ queryKey: queryKeys.books });
+      toast.current?.show({
+        severity: 'success',
+        summary: result.fixed > 0 ? `Re-linked ${result.fixed} ${result.fixed === 1 ? 'cover' : 'covers'}` : 'Covers are up to date',
+        detail: `${result.covers} cover ${result.covers === 1 ? 'file' : 'files'} found in storage`,
+        life: 3500
+      });
+    } catch (err) {
+      toast.current?.show({ severity: 'error', summary: err instanceof Error ? err.message : 'Could not scan covers', life: 4000 });
+    } finally {
+      setRescanning(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -129,6 +148,15 @@ function LibrariesSection() {
           ))}
         </div>
       </SectionCard>
+
+      {canManage && (
+        <SectionCard title="Maintenance" icon="pi-wrench">
+          <p className="mt-0 mb-3 text-sm text-color-secondary">
+            Book covers missing even though the image is in storage? Re-scan links every cover file in the bucket back to its book.
+          </p>
+          <Button label="Re-scan covers" icon="pi pi-refresh" outlined loading={rescanning} onClick={() => void rescanCovers()} className="self-start" />
+        </SectionCard>
+      )}
 
       <Dialog
         visible={dialogOpen}

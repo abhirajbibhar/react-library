@@ -147,6 +147,13 @@ export const legacyFileKey = (bookId: number, fileName: string) =>
 export const resolveFileKey = (record: { id: number; fileName: string; fileKey?: string }) =>
   record.fileKey ?? legacyFileKey(record.id, record.fileName);
 
+/**
+ * Annotation sidecar lives beside the book: `files/<id>/<name>.annotation.json`,
+ * so copying a book's folder carries its annotations with it.
+ */
+export const annotationKey = (record: { id: number; fileName: string; fileKey?: string }) =>
+  resolveFileKey(record).replace(/\.[^./]+$/, '') + '.annotation.json';
+
 export const coverKey = (bookId: number, ext: string) => `files/${bookId}/cover.${ext.toLowerCase()}`;
 
 /** All keys to delete for a book: payload plus its cover (if any). */
@@ -158,5 +165,6 @@ export const bookStorageKeys = (record: {
 }) => {
   const keys = new Set<string>([resolveFileKey(record), legacyFileKey(record.id, record.fileName)]);
   if (record.coverExt) keys.add(coverKey(record.id, record.coverExt));
+  keys.add(annotationKey(record));
   return [...keys];
 };

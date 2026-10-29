@@ -3,6 +3,7 @@ import { Button } from 'primereact/button';
 import { QUOTES, type Quote } from '../data/quotes';
 import { useBooks } from '../hooks/useApi';
 import { useNotes } from '../hooks/useJournal';
+import { useQuotes } from '../hooks/useQuotes';
 import { todayKey } from '../utils/dates';
 import SectionCard from './SectionCard';
 
@@ -12,6 +13,7 @@ const hash = (text: string) => [...text].reduce((acc, ch) => (acc * 31 + ch.char
 export default function QuoteCard() {
   const { data: notes } = useNotes();
   const { data: books } = useBooks();
+  const { data: saved } = useQuotes();
   const [offset, setOffset] = useState(0);
 
   const pool = useMemo<(Quote & { own?: boolean })[]>(() => {
@@ -19,8 +21,11 @@ export default function QuoteCard() {
     const own = (notes ?? [])
       .filter(n => n.type === 'highlight' && n.quote.length <= 400)
       .map(n => ({ text: n.quote, author: titles.get(n.bookId) ?? 'Your library', source: 'Your highlight', own: true }));
-    return [...own, ...QUOTES];
-  }, [notes, books]);
+    // Quotes you saved on purpose come first; highlights the same passage already covers are skipped.
+    const mine = (saved ?? []).map(q => ({ text: q.text, author: q.author || 'Unknown', source: q.source || 'Your quotes', own: true }));
+    const seen = new Set(mine.map(q => q.text));
+    return [...mine, ...own.filter(q => !seen.has(q.text)), ...QUOTES];
+  }, [notes, books, saved]);
 
   const quote = pool[(hash(todayKey()) + offset) % pool.length];
 

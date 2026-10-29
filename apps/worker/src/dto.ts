@@ -57,6 +57,7 @@ export interface BookDto {
   epubProgress?: BookRecord['epubProgress'];
   pdfProgress?: BookRecord['pdfProgress'];
   cbxProgress?: BookRecord['cbxProgress'];
+  annotationCount?: number;
 }
 
 export function toUserDto(user: UserRecord): UserDto {
@@ -119,6 +120,7 @@ export function toBookDto(record: BookRecord, libraryName: string, shelves: Shel
     coverExt: record.coverExt,
     epubProgress: record.epubProgress,
     pdfProgress: record.pdfProgress,
-    cbxProgress: record.cbxProgress
+    cbxProgress: record.cbxProgress,
+    annotationCount: record.annotationCount
   };
 }

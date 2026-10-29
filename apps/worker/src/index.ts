@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { bearerToken, tokenVersionMatches, verifyToken } from './auth';
 import { AppEnv, getStore } from './context';
+import { registerAnnotationRoutes } from './routes/annotations';
+import { registerQuoteRoutes } from './routes/quotes';
 import { registerAuthRoutes } from './routes/auth';
 import { registerBookRoutes } from './routes/books';
 import { registerCbxRoutes } from './routes/cbx';
@@ -124,6 +126,8 @@ registerBookRoutes(app);
 registerEpubRoutes(app);
 registerCbxRoutes(app);
 registerJournalRoutes(app);
+registerAnnotationRoutes(app);
+registerQuoteRoutes(app);
 
 app.onError((err, c) => {
   if (err instanceof HttpError) {

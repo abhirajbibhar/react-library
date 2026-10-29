@@ -1,21 +1,21 @@
 import { Hono } from 'hono';
 import { AppEnv, canSeeLibrary } from '../context';
 import { HttpError } from '../types';
+import { DATE_RE, notebookKey, type BookNote, type NotebookEntry } from '../notebook';
+import { listMonth, readDay, writeDay } from '../notebookStore';
 import {
   MOODS,
   NOTE_COLORS,
   activityDoc,
-  notebookMonthDoc,
   notesDoc,
+  sourceKey,
   type Mood,
   type NoteColor,
   type NoteRecord,
   type NoteType,
-  type NotebookEntry,
   type TodoItem
 } from '../userData';
 
-const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const MAX_QUOTE = 5000;
@@ -23,6 +23,7 @@ const MAX_TEXT = 5000;
 const MAX_TODOS = 100;
 const MAX_TODO_TEXT = 300;
 const MAX_LONG_TEXT = 20000;
+const MAX_BOOK_NOTES = 50;
 
 const asString = (value: unknown, max: number, field: string): string => {
   if (value === undefined || value === null) return '';
@@ -42,6 +43,33 @@ function parseTodos(value: unknown): TodoItem[] {
     const id = typeof item.id === 'string' && item.id.length <= 64 && item.id ? item.id : `t${index}-${Date.now()}`;
     return { id, text, done: item.done === true };
   });
+}
+
+function parseBookNotes(
+  value: unknown,
+  books: { id: number; libraryId: number; metadata: { title?: string }; fileName: string }[],
+  canSee: (libraryId: number) => boolean
+): BookNote[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new HttpError(400, 'bookNotes must be an array');
+  if (value.length > MAX_BOOK_NOTES) throw new HttpError(400, `At most ${MAX_BOOK_NOTES} book notes per day`);
+  const seen = new Set<number>();
+  const notes: BookNote[] = [];
+  for (const raw of value) {
+    const item = (raw ?? {}) as Record<string, unknown>;
+    const bookId = Number(item.bookId);
+    if (!Number.isInteger(bookId) || bookId <= 0) throw new HttpError(400, 'bookNotes[].bookId is required');
+    if (seen.has(bookId)) continue;
+    seen.add(bookId);
+    const book = books.find(b => b.id === bookId);
+    if (book && !canSee(book.libraryId)) throw new HttpError(404, 'Book not found');
+    // A removed book keeps the title it had when the remark was written.
+    const title = book
+      ? (book.metadata.title ?? book.fileName)
+      : asString(item.title, 300, 'bookNotes[].title').trim();
+    notes.push({ bookId, title, text: asString(item.text, MAX_LONG_TEXT, 'bookNotes[].text') });
+  }
+  return notes;
 }
 
 export function registerJournalRoutes(app: Hono<AppEnv>): void {
@@ -124,7 +152,10 @@ export function registerJournalRoutes(app: Hono<AppEnv>): void {
     const user = c.get('user');
     const id = Number(c.req.param('id'));
     await notesDoc(c.env.Library, user.id).update(doc => {
-      if (!doc.items.some(n => n.id === id)) throw new HttpError(404, 'Note not found');
+      const note = doc.items.find(n => n.id === id);
+      if (!note) throw new HttpError(404, 'Note not found');
+      // Remember imported notes that were deleted so the next import doesn't revive them.
+      if (note.source) doc.dismissed = [...new Set([...(doc.dismissed ?? []), sourceKey(note.bookId, note.source.annotationId)])];
       doc.items = doc.items.filter(n => n.id !== id);
     });
     return c.body(null, 204);
@@ -132,12 +163,35 @@ export function registerJournalRoutes(app: Hono<AppEnv>): void {
 
   /* --------------------------------- notebook ---------------------------------- */
 
+  // Days with a note in a month, as light summaries (one R2 listing, no file reads).
   app.get('/api/v1/notebook', async c => {
     const user = c.get('user');
     const month = c.req.query('month') ?? '';
     if (!MONTH_RE.test(month)) throw new HttpError(400, 'month must be YYYY-MM');
-    const { value } = await notebookMonthDoc(c.env.Library, user.id, month).read();
-    return c.json({ month, days: value.days });
+    return c.json({ month, days: await listMonth(c.env.Library, user.id, month) });
+  });
+
+  app.get('/api/v1/notebook/:date', async c => {
+    const user = c.get('user');
+    const date = c.req.param('date');
+    if (!DATE_RE.test(date)) throw new HttpError(400, 'date must be YYYY-MM-DD');
+    const { entry } = await readDay(c.env.Library, user.id, date);
+    return c.json(entry);
+  });
+
+  // The stored Markdown itself, for "Download .md".
+  app.get('/api/v1/notebook/:date/markdown', async c => {
+    const user = c.get('user');
+    const date = c.req.param('date');
+    if (!DATE_RE.test(date)) throw new HttpError(400, 'date must be YYYY-MM-DD');
+    const { markdown } = await readDay(c.env.Library, user.id, date);
+    if (markdown === null) throw new HttpError(404, 'No notebook entry for this day');
+    return new Response(markdown, {
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${notebookKey(user.id, date).split('/').pop()}"`
+      }
+    });
   });
 
   app.put('/api/v1/notebook/:date', async c => {
@@ -145,17 +199,17 @@ export function registerJournalRoutes(app: Hono<AppEnv>): void {
     const date = c.req.param('date');
     if (!DATE_RE.test(date)) throw new HttpError(400, 'date must be YYYY-MM-DD');
     const body = await c.req.json().catch(() => ({}));
+    const { index } = await c.get('store').read();
     const entry: NotebookEntry = {
       date,
       todos: parseTodos(body.todos),
       mood: (MOODS as readonly string[]).includes(body.mood) ? (body.mood as Mood) : null,
       reflection: asString(body.reflection, MAX_LONG_TEXT, 'reflection'),
       thoughts: asString(body.thoughts, MAX_LONG_TEXT, 'thoughts'),
+      bookNotes: parseBookNotes(body.bookNotes, index.books, id => canSeeLibrary(user, id)),
       updatedAt: new Date().toISOString()
     };
-    await notebookMonthDoc(c.env.Library, user.id, date.slice(0, 7)).update(doc => {
-      doc.days[date] = entry;
-    });
+    await writeDay(c.env.Library, user.id, entry);
     return c.json(entry);
   });
 

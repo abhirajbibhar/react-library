@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import app from '../src/index';
+import { weekFolder, type NotebookEntry } from '../src/notebook';
 import { localDate, recordReading, resolveTimeZone } from '../src/userData';
 import { MockR2Bucket, asBucket } from './mock-r2';
 
@@ -89,37 +90,176 @@ describe('notes and highlights', () => {
   });
 });
 
-describe('notebook', () => {
-  it('saves a day and returns it with its month', async () => {
+describe('notebook markdown', () => {
+  const put = (token: string, date: string, body: unknown) =>
+    call(`/api/v1/notebook/${date}`, token, { method: 'PUT', body: JSON.stringify(body) });
+  const getDay = async (token: string, date: string) =>
+    (await (await call(`/api/v1/notebook/${date}`, token)).json()) as NotebookEntry;
+
+  it('computes ISO weeks, including year-boundary edge cases', () => {
+    expect(weekFolder('2026-10-28')).toBe('2026-W44');
+    expect(weekFolder('2026-01-01')).toBe('2026-W01');
+    expect(weekFolder('2027-01-01')).toBe('2026-W53'); // Friday: still last year's week 53
+    expect(weekFolder('2024-12-30')).toBe('2025-W01'); // Monday: already next year's week 1
+    expect(weekFolder('2026-10-26')).toBe(weekFolder('2026-11-01')); // Mon–Sun share a folder
+    expect(weekFolder('2026-11-02')).toBe('2026-W45');
+  });
+
+  it('writes <week>/<DD-MM-YYYY>.md and reads it back', async () => {
     const token = await login();
-    const put = await call('/api/v1/notebook/2026-10-26', token, {
-      method: 'PUT',
-      body: JSON.stringify({
-        todos: [{ id: 'a', text: 'Read 30 pages', done: true }, { text: 'Review notes' }],
-        mood: 'great',
-        reflection: 'Good session',
-        thoughts: ''
-      })
+    const res = await put(token, '2026-10-28', {
+      todos: [{ id: 'a', text: 'Read 30 pages', done: true }, { id: 'b', text: 'Review notes', done: false }],
+      mood: 'great',
+      reflection: 'Good session',
+      thoughts: 'Fear is the mind-killer'
     });
-    expect(put.status).toBe(200);
-    await call('/api/v1/notebook/2026-10-27', token, { method: 'PUT', body: JSON.stringify({ mood: 'nope' }) });
+    expect(res.status).toBe(200);
+
+    expect(bucket.keys()).toContain('data/users/1/notebook/2026-W44/28-10-2026.md');
+    const object = await bucket.get('data/users/1/notebook/2026-W44/28-10-2026.md');
+    const markdown = await object.text();
+    expect(markdown).toContain('date: 2026-10-28');
+    expect(markdown).toContain('week: 2026-W44');
+    expect(markdown).toContain('mood: great');
+    expect(markdown).toContain('# Wednesday, 28 October 2026');
+    expect(markdown).toContain('- [x] Read 30 pages');
+    expect(markdown).toContain('- [ ] Review notes');
+    expect(object.httpMetadata?.contentType).toContain('text/markdown');
+
+    const day = await getDay(token, '2026-10-28');
+    expect(day).toMatchObject({ date: '2026-10-28', mood: 'great', reflection: 'Good session', thoughts: 'Fear is the mind-killer' });
+    expect(day.todos.map(t => [t.text, t.done])).toEqual([['Read 30 pages', true], ['Review notes', false]]);
+  });
+
+  it('lists a month as summaries without reading each file', async () => {
+    const token = await login();
+    await put(token, '2026-10-26', { todos: [{ text: 'a', done: true }, { text: 'b' }], mood: 'good', reflection: 'x' });
+    await put(token, '2026-10-30', { mood: 'low' });
+    await put(token, '2026-11-02', { mood: 'okay' }); // another month, another week folder
 
     const month = (await (await call('/api/v1/notebook?month=2026-10', token)).json()) as {
-      days: Record<string, { todos: { id: string; done: boolean }[]; mood: string | null }>;
+      days: Record<string, { todos: number; done: number; mood: string | null; hasText: boolean }>;
     };
-    expect(Object.keys(month.days)).toEqual(['2026-10-26', '2026-10-27']);
-    expect(month.days['2026-10-26'].mood).toBe('great');
-    expect(month.days['2026-10-26'].todos).toHaveLength(2);
-    expect(month.days['2026-10-26'].todos[1].id).toBeTruthy();
-    expect(month.days['2026-10-27'].mood).toBeNull();
+    expect(Object.keys(month.days)).toEqual(['2026-10-26', '2026-10-30']);
+    expect(month.days['2026-10-26']).toMatchObject({ todos: 2, done: 1, mood: 'good', hasText: true });
+    expect(month.days['2026-10-30']).toMatchObject({ todos: 0, mood: 'low', hasText: false });
+  });
+
+  it('finds days that sit in the previous ISO year\u2019s last week', async () => {
+    const token = await login();
+    await put(token, '2027-01-01', { mood: 'good' });
+    expect(bucket.keys()).toContain('data/users/1/notebook/2026-W53/01-01-2027.md');
+    const month = (await (await call('/api/v1/notebook?month=2027-01', token)).json()) as { days: Record<string, unknown> };
+    expect(Object.keys(month.days)).toEqual(['2027-01-01']);
+  });
+
+  it('round-trips text that looks like Markdown structure', async () => {
+    const token = await login();
+    const nasty = '## Not a heading\n\\# literal backslash\n### x <!-- book:9 -->\n---\n# Title-ish\n- [ ] not a todo';
+    await put(token, '2026-10-28', {
+      todos: [{ text: 'line one\nline two' }],
+      reflection: nasty,
+      thoughts: nasty,
+      bookNotes: []
+    });
+    const day = await getDay(token, '2026-10-28');
+    expect(day.reflection).toBe(nasty);
+    expect(day.thoughts).toBe(nasty);
+    expect(day.todos).toHaveLength(1);
+    expect(day.todos[0].text).toBe('line one line two');
+    expect(day.bookNotes).toEqual([]);
+  });
+
+  it('keeps sections you added by hand', async () => {
+    const token = await login();
+    await put(token, '2026-10-28', { reflection: 'mine' });
+    const key = 'data/users/1/notebook/2026-W44/28-10-2026.md';
+    const current = await (await bucket.get(key)).text();
+    await bucket.put(key, `${current}\n## Gratitude\n\nA quiet evening.\n`);
+
+    await put(token, '2026-10-28', { reflection: 'mine, edited', mood: 'good' });
+    const after = await (await bucket.get(key)).text();
+    expect(after).toContain('mine, edited');
+    expect(after).toContain('## Gratitude');
+    expect(after).toContain('A quiet evening.');
+  });
+
+  it('removes the file when a day is cleared, and lists hand-made files without metadata', async () => {
+    const token = await login();
+    await put(token, '2026-10-28', { reflection: 'temp' });
+    await put(token, '2026-10-28', {});
+    expect(bucket.keys().filter(k => k.endsWith('.md'))).toEqual([]);
+
+    // A file created outside the app has no custom metadata but should still show up.
+    await bucket.put(
+      'data/users/1/notebook/2026-W44/29-10-2026.md',
+      '---\ndate: 2026-10-29\nmood: okay\n---\n\n## To-do\n\n- [x] one\n- [ ] two\n'
+    );
+    const month = (await (await call('/api/v1/notebook?month=2026-10', token)).json()) as {
+      days: Record<string, { todos: number; done: number; mood: string | null }>;
+    };
+    expect(month.days['2026-10-29']).toMatchObject({ todos: 2, done: 1, mood: 'okay' });
+  });
+
+  it('links remarks to books and keeps the title when a book is later removed', async () => {
+    const token = await login();
+    const bookId = await uploadBook(token); // "Dune"
+    await put(token, '2026-10-28', {
+      bookNotes: [
+        { bookId, title: 'ignored, server uses the real title', text: 'Chapter 3 hit hard.' },
+        { bookId: 999, title: 'Gone Book', text: 'Orphan remark' },
+        { bookId, text: 'duplicate id is dropped' }
+      ]
+    });
+    const markdown = await (await bucket.get('data/users/1/notebook/2026-W44/28-10-2026.md')).text();
+    expect(markdown).toContain(`### Dune <!-- book:${bookId} -->`);
+    expect(markdown).toContain(`books: [${bookId}, 999]`);
+
+    const day = await getDay(token, '2026-10-28');
+    expect(day.bookNotes).toEqual([
+      { bookId, title: 'Dune', text: 'Chapter 3 hit hard.' },
+      { bookId: 999, title: 'Gone Book', text: 'Orphan remark' }
+    ]);
+  });
+
+  it('migrates a legacy month document into daily files without clobbering newer notes', async () => {
+    const token = await login();
+    await bucket.put(
+      'data/users/1/notebook/2026-09.json',
+      JSON.stringify({
+        days: {
+          '2026-09-21': { date: '2026-09-21', todos: [{ id: 'x', text: 'Old todo', done: true }], mood: 'good', reflection: 'Legacy', thoughts: '', updatedAt: '' },
+          '2026-09-22': { date: '2026-09-22', todos: [], mood: null, reflection: 'Old 22', thoughts: '', updatedAt: '' }
+        }
+      })
+    );
+    await put(token, '2026-09-22', { reflection: 'Newer, written after the upgrade' });
+
+    const day = await getDay(token, '2026-09-21');
+    expect(day).toMatchObject({ reflection: 'Legacy', mood: 'good' });
+    expect(day.todos[0]).toMatchObject({ text: 'Old todo', done: true });
+    expect(bucket.keys()).toContain('data/users/1/notebook/2026-W39/21-09-2026.md');
+    expect(bucket.keys()).not.toContain('data/users/1/notebook/2026-09.json');
+    expect((await getDay(token, '2026-09-22')).reflection).toBe('Newer, written after the upgrade');
+  });
+
+  it('serves the stored Markdown for download', async () => {
+    const token = await login();
+    expect((await call('/api/v1/notebook/2026-10-28/markdown', token)).status).toBe(404);
+    await put(token, '2026-10-28', { reflection: 'hello' });
+    const res = await call('/api/v1/notebook/2026-10-28/markdown', token);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Disposition')).toContain('28-10-2026.md');
+    expect(await res.text()).toContain('hello');
   });
 
   it('rejects bad dates, months and empty to-dos', async () => {
     const token = await login();
     expect((await call('/api/v1/notebook/2026-13-01', token, { method: 'PUT', body: '{}' })).status).toBe(400);
+    expect((await call('/api/v1/notebook/2026-13-01', token)).status).toBe(400);
     expect((await call('/api/v1/notebook?month=2026-1', token)).status).toBe(400);
-    const empty = await call('/api/v1/notebook/2026-10-26', token, { method: 'PUT', body: JSON.stringify({ todos: [{ text: '  ' }] }) });
-    expect(empty.status).toBe(400);
+    expect((await put(token, '2026-10-26', { todos: [{ text: '  ' }] })).status).toBe(400);
+    expect((await put(token, '2026-10-26', { bookNotes: 'nope' })).status).toBe(400);
   });
 });
 

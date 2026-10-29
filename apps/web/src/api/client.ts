@@ -69,7 +69,7 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, retry = true, as: 'json' | 'blob' = 'json'): Promise<T> {
   const headers = new Headers(init.headers);
   // Lets the server place reading activity on the reader's own calendar day.
   headers.set('X-Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -88,7 +88,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 
   if (response.status === 401 && retry) {
     if (await tryRefresh()) {
-      return request<T>(path, init, false);
+      return request<T>(path, init, false, as);
     }
     tokenStore.clear();
     if (!window.location.pathname.startsWith('/login')) {
@@ -99,11 +99,14 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 
   if (!response.ok) throw await parseError(response);
   if (response.status === 204) return undefined as T;
+  if (as === 'blob') return (await response.blob()) as T;
   return (await response.json()) as T;
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  /** Authenticated download of a non-JSON response. */
+  blob: (path: string) => request<Blob>(path, {}, true, 'blob'),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body ?? {}) }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),

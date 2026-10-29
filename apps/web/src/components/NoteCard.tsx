@@ -13,13 +13,16 @@ export default function NoteCard({
   bookTitle,
   showBook = true,
   onEdit,
-  onDelete
+  onDelete,
+  onQuote
 }: {
   note: Note;
   bookTitle?: string;
   showBook?: boolean;
   onEdit: (note: Note) => void;
   onDelete: (note: Note) => void;
+  /** Offered for highlights, which have a passage worth keeping as a quote. */
+  onQuote?: (note: Note) => void;
 }) {
   return (
     <Card
@@ -45,7 +48,7 @@ export default function NoteCard({
             </Link>
           )}
           <span className="white-space-nowrap overflow-hidden text-overflow-ellipsis">
-            {[note.chapter, note.percentage !== undefined ? `${Math.round(note.percentage)}%` : null, new Date(note.createdAt).toLocaleDateString()]
+            {[note.source ? 'From PDF' : null, note.chapter, note.location && note.source ? `p. ${note.location}` : null, note.percentage !== undefined ? `${Math.round(note.percentage)}%` : null, new Date(note.createdAt).toLocaleDateString()]
               .filter(Boolean)
               .join(' · ')}
           </span>
@@ -61,6 +64,9 @@ export default function NoteCard({
             {...tip('Copy')}
             onClick={() => void navigator.clipboard?.writeText([note.quote, note.text].filter(Boolean).join('\n\n'))}
           />
+          {onQuote && note.quote && (
+            <Button icon="pi pi-comment" text rounded size="small" severity="secondary" aria-label="Save as quote" {...tip('Save as quote')} onClick={() => onQuote(note)} />
+          )}
           <Button icon="pi pi-pencil" text rounded size="small" severity="secondary" aria-label="Edit" onClick={() => onEdit(note)} />
           <Button icon="pi pi-trash" text rounded size="small" severity="danger" aria-label="Delete" onClick={() => onDelete(note)} />
         </div>

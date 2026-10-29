@@ -109,6 +109,8 @@ export interface BookRecord {
   epubProgress?: EpubProgress;
   pdfProgress?: PageProgress;
   cbxProgress?: PageProgress;
+  /** Highlights + notes in the annotation sidecar (0/absent = none). */
+  annotationCount?: number;
 }
 
 export interface LibraryRecord {

@@ -2,6 +2,8 @@ interface StoredObject {
   bytes: Uint8Array;
   etag: string;
   contentType?: string;
+  customMetadata?: Record<string, string>;
+  uploaded: Date;
 }
 
 export interface R2RangeSpec {
@@ -12,17 +14,43 @@ export interface R2RangeSpec {
 
 /**
  * Minimal in-memory R2 double. Implements the subset of behaviour the app
- * relies on: head/get/put/delete plus conditional puts (etagMatches and
- * etagDoesNotMatch: '*'), ranged reads and httpMetadata.
+ * relies on: head/get/put/delete/list plus conditional puts (etagMatches and
+ * etagDoesNotMatch: '*'), ranged reads, httpMetadata and customMetadata.
  */
 export class MockR2Bucket {
   private objects = new Map<string, StoredObject>();
   private counter = 0;
 
-  async head(key: string): Promise<{ etag: string; size: number } | null> {
+  async head(key: string): Promise<{ etag: string; size: number; customMetadata?: Record<string, string> } | null> {
     const object = this.objects.get(key);
     if (!object) return null;
-    return { etag: object.etag, size: object.bytes.length };
+    return { etag: object.etag, size: object.bytes.length, customMetadata: object.customMetadata };
+  }
+
+  /** Lexicographic listing with prefix + cursor paging, like R2. */
+  async list(options: { prefix?: string; cursor?: string; limit?: number; include?: string[] } = {}) {
+    const limit = options.limit ?? 1000;
+    const keys = [...this.objects.keys()]
+      .filter(key => key.startsWith(options.prefix ?? ''))
+      .sort()
+      .filter(key => options.cursor === undefined || key > options.cursor);
+    const page = keys.slice(0, limit);
+    const truncated = keys.length > page.length;
+    return {
+      objects: page.map(key => {
+        const object = this.objects.get(key)!;
+        return {
+          key,
+          size: object.bytes.length,
+          etag: object.etag,
+          uploaded: object.uploaded,
+          customMetadata: options.include?.includes('customMetadata') ? object.customMetadata : undefined
+        };
+      }),
+      truncated,
+      cursor: truncated ? page[page.length - 1] : undefined,
+      delimitedPrefixes: [] as string[]
+    };
   }
 
   async get(
@@ -58,6 +86,8 @@ export class MockR2Bucket {
       size: total,
       range,
       httpMetadata: object.contentType ? { contentType: object.contentType } : undefined,
+      customMetadata: object.customMetadata,
+      uploaded: object.uploaded,
       body: new ReadableStream({
         start(controller) {
           controller.enqueue(slice.slice());
@@ -76,6 +106,7 @@ export class MockR2Bucket {
     options?: {
       onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
       httpMetadata?: { contentType?: string };
+      customMetadata?: Record<string, string>;
     }
   ): Promise<{ etag: string; size: number } | null> {
     const existing = this.objects.get(key);
@@ -119,7 +150,9 @@ export class MockR2Bucket {
     this.objects.set(key, {
       bytes,
       etag,
-      contentType: options?.httpMetadata?.contentType
+      contentType: options?.httpMetadata?.contentType,
+      customMetadata: options?.customMetadata,
+      uploaded: new Date()
     });
     return { etag, size: bytes.length };
   }

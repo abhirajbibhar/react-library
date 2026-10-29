@@ -8,6 +8,7 @@ import type { MenuItem } from 'primereact/menuitem';
 import { tip } from '../utils/tooltip';
 import { useBooks, useLibraries, useShelves } from '../hooks/useApi';
 import { useActivity, useNotes } from '../hooks/useJournal';
+import { useQuotes } from '../hooks/useQuotes';
 import { computeStreaks } from '../utils/streak';
 import { todayKey } from '../utils/dates';
 
@@ -63,6 +64,7 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
   const { data: libraries } = useLibraries();
   const { data: shelves } = useShelves();
   const { data: notes } = useNotes();
+  const { data: quotes } = useQuotes();
   const { data: activity } = useActivity();
 
   const sections = useMemo<MenuSectionData[]>(() => {
@@ -87,6 +89,7 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
         title: 'Journal',
         entries: [
           { to: '/notes', label: 'Notes & Highlights', icon: 'pi pi-pencil', count: notes?.length ?? 0 },
+          { to: '/quotes', label: 'Quotes', icon: 'pi pi-comment', count: quotes?.length ?? 0 },
           { to: '/notebook', label: 'Notebook', icon: 'pi pi-file-edit' },
           {
             to: '/streak',
@@ -123,7 +126,7 @@ export default function SidebarMenu({ collapsed = false }: { collapsed?: boolean
         ]
       }
     ].filter(section => section.entries.length > 0);
-  }, [books, libraries, shelves, notes, activity]);
+  }, [books, libraries, shelves, notes, quotes, activity]);
 
   if (collapsed) {
     const railButton = (entry: MenuEntry) => {

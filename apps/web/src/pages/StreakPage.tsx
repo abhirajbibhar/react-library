@@ -5,7 +5,8 @@ import { Tag } from 'primereact/tag';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import StreakCard, { Stat } from '../components/StreakCard';
-import { useActivity, useNotebookMonth } from '../hooks/useJournal';
+import { useBooks } from '../hooks/useApi';
+import { useActivity, useNotebookEntry } from '../hooks/useJournal';
 import { DayReading } from './NotebookPage';
 import { dateKey, formatDuration, formatLongDate, monthKey, parseDateKey, todayKey } from '../utils/dates';
 import { computeStreaks, isReadDay } from '../utils/streak';
@@ -28,7 +29,12 @@ export default function StreakPage() {
     };
   }, [days, viewMonth]);
 
-  const notebook = useNotebookMonth(monthKey(selected)).data?.days[selected];
+  const { data: books } = useBooks();
+  const todaySeconds = days[today]?.seconds ?? 0;
+  const todayBooks = Object.keys(days[today]?.books ?? {}).length;
+  const readingNow = (books ?? []).filter(b => b.readStatus === 'READING' || b.readStatus === 'RE_READING').length;
+
+  const notebook = useNotebookEntry(selected).data;
   const todosDone = notebook?.todos.filter(t => t.done).length ?? 0;
 
   return (
@@ -75,6 +81,14 @@ export default function StreakPage() {
         </div>
 
         <div className="col-12 lg:col-7 flex flex-column gap-3">
+          <SectionCard title="Today" icon="pi-sun">
+            <div className="grid">
+              <div className="col-4"><Stat label="Read today" value={formatDuration(todaySeconds)} icon="pi-clock" /></div>
+              <div className="col-4"><Stat label="Books today" value={todayBooks} icon="pi-book" /></div>
+              <div className="col-4"><Stat label="Reading now" value={readingNow} icon="pi-bookmark" /></div>
+            </div>
+          </SectionCard>
+
           <SectionCard title="This month" icon="pi-chart-bar">
             <div className="grid">
               <div className="col-6 md:col-3"><Stat label="Current" value={`${stats.current}d`} icon="pi-bolt" /></div>
@@ -89,7 +103,7 @@ export default function StreakPage() {
             <DayReading date={selected} />
 
             <h4 className="mt-4 mb-2 text-sm text-color-secondary uppercase font-medium">From my notebook</h4>
-            {notebook && (notebook.reflection || notebook.todos.length > 0 || notebook.mood) ? (
+            {notebook && (notebook.reflection || notebook.todos.length > 0 || notebook.mood || notebook.bookNotes.some(n => n.text.trim())) ? (
               <div className="flex flex-column gap-2">
                 <div className="flex flex-wrap align-items-center gap-2 text-sm">
                   {notebook.mood && <Tag value={notebook.mood} />}
@@ -104,6 +118,18 @@ export default function StreakPage() {
                     {notebook.reflection}
                   </p>
                 )}
+                {notebook.bookNotes
+                  .filter(n => n.text.trim())
+                  .map(n => (
+                    <div key={n.bookId} className="text-sm line-height-3" style={{ overflowWrap: 'anywhere' }}>
+                      <Link to={`/book/${n.bookId}`} className="no-underline text-primary font-medium">
+                        {n.title}
+                      </Link>
+                      <span className="block text-color-secondary" style={{ whiteSpace: 'pre-wrap' }}>
+                        {n.text}
+                      </span>
+                    </div>
+                  ))}
               </div>
             ) : (
               <p className="m-0 text-sm text-color-secondary">Nothing written for this day.</p>

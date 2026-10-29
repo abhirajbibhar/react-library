@@ -29,6 +29,8 @@ const MIME_BY_EXT: Record<string, string> = {
   azw3: 'application/vnd.amazon.ebook'
 };
 
+const COVER_EXT_PREFERENCE = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'];
+
 const METADATA_STRING_KEYS = [
   'title',
   'subtitle',
@@ -375,6 +377,50 @@ export function registerBookRoutes(app: Hono<AppEnv>): void {
     }
 
     return new Response(body, { status, headers });
+  });
+
+  /**
+   * Re-link covers that exist in the bucket but are missing (or point at the
+   * wrong extension) in the library index. Covers live at
+   * `files/<bookId>/cover.<ext>`; this lists them once and fixes every record
+   * that disagrees, so a bucket restored/copied by hand shows its covers again.
+   */
+  app.post('/api/v1/books/covers/rescan', async c => {
+    const user = c.get('user');
+    requirePermission(user, 'canManageLibrary');
+
+    const found = new Map<number, { ext: string; uploaded: string }[]>();
+    let cursor: string | undefined;
+    do {
+      const page: R2Objects = await c.env.Library.list({ prefix: 'files/', cursor });
+      for (const object of page.objects) {
+        const match = object.key.match(/^files\/(\d+)\/cover\.([A-Za-z0-9]+)$/);
+        if (!match) continue;
+        const id = Number(match[1]);
+        const list = found.get(id) ?? [];
+        list.push({ ext: match[2].toLowerCase(), uploaded: new Date(object.uploaded).toISOString() });
+        found.set(id, list);
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+
+    const fixedIds = await c.get('store').update(index => {
+      const fixed: number[] = [];
+      for (const record of index.books) {
+        const candidates = found.get(record.id);
+        if (!candidates || candidates.length === 0) continue;
+        // Keep the recorded cover when it is really there.
+        if (record.coverExt && candidates.some(x => x.ext === record.coverExt)) continue;
+        const pick =
+          COVER_EXT_PREFERENCE.map(ext => candidates.find(x => x.ext === ext)).find(Boolean) ?? candidates[0];
+        record.coverExt = pick.ext;
+        record.coverUpdatedOn = record.coverUpdatedOn ?? pick.uploaded;
+        fixed.push(record.id);
+      }
+      return fixed;
+    });
+
+    return c.json({ covers: found.size, fixed: fixedIds.length, fixedIds });
   });
 
   app.get('/api/v1/books/:id/cover', async c => {
